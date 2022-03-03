@@ -17,6 +17,6 @@ void uart_send(char c);
 char uart_recv();
 
 void uart_sendstr(char *str);
-char uart_getline();
+void uart_recvline(char *ptr);
 
 #endif /* _GPIO_UART_H_ */

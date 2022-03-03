@@ -14,7 +14,7 @@
 /**
  * Auxiliary peripherals Register Map (BCM2835 P.8)
  */
-#define AUX_PERIF_REG_MAP_BASE (PERIF_BUS_ADDRESS + 0x215000)
+#define AUX_PERIF_REG_MAP_BASE (PERIF_ADDRESS + 0x215000)
 
 typedef reg32 AuxIrqReg;
 #define AUXIRQ_RESERVED_BIT 3
@@ -106,7 +106,7 @@ typedef reg32 AuxMuBaudReg;
 #define AUXMUBAUD_RESERVED_BIT 16
 #define AUXMUBAUD_Baudrate_BIT 0
 
-typedef struct _AuxRegs
+struct _AuxRegs
 {
     /* Auxiliary Interrupt status (0x0) */
     AuxIrqReg irq;
@@ -160,6 +160,7 @@ typedef struct _AuxRegs
     reg32 spi1_io;
     /* SPI 2 Peek (0xD4) */
     reg32 spi1_peek;
-} AuxRegs;
+} __attribute__((__packed__));
+typedef struct _AuxRegs AuxRegs;
 
 #endif /* _GPIO_BASE_H_ */

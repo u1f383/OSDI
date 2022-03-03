@@ -1,8 +1,12 @@
 #include "gpio/uart.h"
 #include "gpio/gpio.h"
 
+AuxRegs *aux_regs;
+
 void uart_init()
 {
+    aux_regs = ((AuxRegs *) AUX_PERIF_REG_MAP_BASE);
+
     /* Update GPIO14/15 to alt5 because of minu uart */
     set_value(*GPIO_GPFSEL1_REG, 0, GPIO_FSEL14_BIT, GPIO_FSEL14_BIT + GPIO_FSEL_SIZE);
     set_value(*GPIO_GPFSEL1_REG, 0, GPIO_FSEL15_BIT, GPIO_FSEL15_BIT + GPIO_FSEL_SIZE);
@@ -11,7 +15,6 @@ void uart_init()
     set_value(*GPIO_GPPUD_REG, GPIO_GPPUD_Off, 0, sizeof(reg32));
     set_value(*GPIO_GPPUDCLK0_REG, GPIO_GPPUDCLK_NO_EFFECT, 0, sizeof(reg32));
 
-    AuxRegs *aux_regs = ((AuxRegs *) AUX_PERIF_REG_MAP_BASE);
     set_bit(aux_regs->enb, AUXENB_Mini_UART_enable_BIT);
     /* Disable tran/recv */
     set_zero(aux_regs->mu_cntl, 0, sizeof(reg32));
@@ -32,11 +35,29 @@ void uart_init()
 
 void uart_send(char c)
 {
+    while (!get_bits(aux_regs->mu_lsr, AUXMULSR_Transmitter_empty_BIT, AUXMULSR_Transmitter_idle_BIT));
+    set_value(aux_regs->mu_io, c, AUXMUIO_Transmit_data_write_BIT, AUXMUIO_RESERVED_BIT);
+}
 
+char uart_recv()
+{
+    while (!get_bits(aux_regs->mu_lsr, AUXMULSR_Data_ready_BIT, AUXMULSR_Receiver_Overrun_BIT));
+    return get_bits(aux_regs->mu_io, AUXMUIO_Receive_data_read_BIT, AUXMUIO_RESERVED_BIT);
+}
+
+void uart_recvline(char *ptr)
+{
+    while ((*ptr = uart_recv()) != '\n' && *ptr != '\r') {
+        uart_send(*ptr);
+        ptr++;
+    }
+    uart_send('\n');
+    *ptr = '\0';
 }
 
 void uart_sendstr(char *str)
 {
-
+    while (*str)
+        uart_send(*str++);
 }
 

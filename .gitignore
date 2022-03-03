@@ -3,3 +3,5 @@
 .DS_store
 nctuos.img
 build
+test.dSYM
+kernel.img

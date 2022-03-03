@@ -4,13 +4,13 @@
 /* TYPE DEFINITIONS */
 typedef signed char int8_t;
 typedef short int16_t;
-typedef long int32_t;
-typedef long long int64_t;
+typedef int int32_t;
+typedef long int64_t;
 
 typedef unsigned char uint8_t;
 typedef unsigned short uint16_t;
-typedef unsigned long uint32_t;
-typedef unsigned long long uint64_t;
+typedef unsigned uint32_t;
+typedef unsigned long uint64_t;
 
 /* REGISTER DATA TYPE DEFINITION */
 /**
@@ -29,31 +29,34 @@ typedef volatile uint64_t reg64;
 
 /* [low, high) */
 #define get_bits(data, low, high) \
-    ((data & ((1UL << high) - 1UL)) >> low)
+    ((data & ((1U << high) - 1U)) >> low)
 
 #define set_bit(data, bit) \
     do { \
-        data |= (1UL << bit); \
+        data |= (1U << bit); \
     } while(0)
 
 #define unset_bit(data, bit) \
     do { \
-        data &= ~(1UL << bit); \
+        data &= ~(1U << bit); \
     } while (0)
 
 #define toggle_bit(data, bit) \
     do { \
-        data ^= (1UL << bit); \
+        data ^= (1U << bit); \
     } while(0)
 
 #define set_zero(data, low, high) \
     do { \
-        data &= ~((1UL << high) - (1UL << low)); \
+        data &= ~((1U << high) - (1U << low)); \
     } while (0)
 
 #define set_value(data, value, low, high) \
     do { \
-        data = ((data) & ~((1UL << (high)) - (1UL << (low)))) | ((value) << low); \
+        data = ((data) & ~((1U << (high)) - (1U << (low)))) | ((value) << low); \
     } while(0)
+
+/* STRING OPERATION */
+int strcmp(const char *s1, const char *s2);
 
 #endif /* _UTIL_H_ */

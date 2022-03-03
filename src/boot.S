@@ -1,4 +1,4 @@
-.section ".text"
+.section ".text.boot"
 
 .global _start
 
@@ -27,8 +27,9 @@ master:
 
 memzero:
     str xzr, [x0], #1
-    sub x1, x1, #1
-    cbnz x1, memzero
+    add x0, x0, #1
+    cmp x0, x1
+    b.ne memzero
     ret
 
 slave:

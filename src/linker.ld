@@ -24,5 +24,17 @@ SECTIONS
     *(.data)
   }
   
+  . = ALIGN(0x10);
+  .rodata :
+  {
+    *(.rodata)
+  }
+
+  /DISCARD/ :
+  {
+    *(.comment)
+    *(.eh_frame)
+  }
+  
   _end = .;
 }
