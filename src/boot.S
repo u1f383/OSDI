@@ -25,8 +25,7 @@ master:
     b kernel
 
 memzero:
-    str xzr, [x0], #1
-    add x0, x0, #1
+    str xzr, [x0], #8
     cmp x0, x1
     b.ne memzero
     ret

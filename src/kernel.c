@@ -108,9 +108,10 @@ void get_arm_memory(uint32_t *base, uint32_t *size)
 void usage()
 {
     uart_sendstr(""
-        "help\t\t: print this help menu\n"
-        "hello\t\t: print Hello World!\n"
-        "reboot\t\t: reboot the device\n"
+        "help\t\t: print this help menu\r\n"
+        "hello\t\t: print Hello World!\r\n"
+        "reboot\t\t: reboot the device\r\n"
+        "mailbox\t\t: show board revision and arm memory information\r\n"
     );
 }
 
@@ -125,33 +126,35 @@ void kernel()
     
     get_arm_memory(&base, &size);
     get_board_revision(&frev);
-    
-    uart_sendstr("@Arm base memory: ");
-    lutoa(buf, base, 16);
-    uart_sendstr(buf);
-    uart_send('\n');
-    
-    uart_sendstr("@Arm base size: ");
-    lutoa(buf, size, 16);
-    uart_sendstr(buf);
-    uart_send('\n');
-    
-    uart_sendstr("@Board revision: ");
-    lutoa(buf, frev, 16);
-    uart_sendstr(buf);
-    uart_send('\n');
 
     while (1)
     {
         uart_sendstr("# ");
         uart_recvline(cmd);
+        uart_sendstr("\r\n");
 
         if (!strcmp(cmd, "hello")) {
-            uart_sendstr("Hello World!\n");
+            uart_sendstr("Hello World!\n\r");
         } else if (!strcmp(cmd, "help")) {
             usage();
         } else if (!strcmp(cmd, "reboot")) {
             reset(10);
+            while (1);
+        } else if (!strcmp(cmd, "mailbox")) {
+            uart_sendstr("@Arm base memory: ");
+            lutoa(buf, base, 16);
+            uart_sendstr(buf);
+            uart_sendstr("\r\n");
+            
+            uart_sendstr("@Arm base size: ");
+            lutoa(buf, size, 16);
+            uart_sendstr(buf);
+            uart_sendstr("\r\n");
+            
+            uart_sendstr("@Board revision: ");
+            lutoa(buf, frev, 16);
+            uart_sendstr(buf);
+            uart_sendstr("\r\n");
         }
     }
 }

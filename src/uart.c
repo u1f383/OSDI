@@ -61,7 +61,6 @@ void uart_recvline(char *ptr)
         uart_send(*ptr);
         ptr++;
     }
-    uart_send('\n');
     *ptr = '\0';
 }
 
