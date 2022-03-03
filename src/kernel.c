@@ -1,3 +1,4 @@
+#include "util.h"
 #include "gpio/uart.h"
 #include "gpio/base.h"
 #include "lib/printf.h"
@@ -41,7 +42,7 @@ void cancel_reset()
 #define MAILBOX_RES_CODE_REQ_SUCC 0x80000000
 #define MAILBOX_RES_CODE_REQ_ERR 0x80000001
 
-#define MAILBOX_TAG_GET_FIRM_REVISION 0x00000001
+#define MAILBOX_TAG_GET_BOARD_REVISION 0x00010002
 #define MAILBOX_TAG_GET_ARM_MEMORY 0x00010005
 #define MAILBOX_TAG_REQ_CODE 0
 #define MAILBOX_TAG_END 0
@@ -50,7 +51,7 @@ void cancel_reset()
 
 volatile uint32_t __attribute__((aligned(0b10000))) mbox_buffer[36];
 int mailbox_call(uint32_t channel, volatile uint32_t *mbox);
-void get_firm_revision(uint32_t *frev);
+void get_board_revision(uint32_t *frev);
 void get_arm_memory(uint32_t *base, uint32_t *size);
 
 int mailbox_call(uint32_t channel, volatile uint32_t *mbox)
@@ -68,12 +69,12 @@ int mailbox_call(uint32_t channel, volatile uint32_t *mbox)
     return *MAILBOX0_READ == magic;
 }
 
-void get_firm_revision(uint32_t *frev)
+void get_board_revision(uint32_t *frev)
 {
     mbox_buffer[0] = 7 * 4;
     mbox_buffer[1] = MAILBOX_REQ_CODE_PROC_REQ;
     /* Tags */
-    mbox_buffer[2] = MAILBOX_TAG_GET_FIRM_REVISION;
+    mbox_buffer[2] = MAILBOX_TAG_GET_BOARD_REVISION;
     mbox_buffer[3] = sizeof(uint32_t); /* Max value buffer size */
     mbox_buffer[4] = MAILBOX_TAG_REQ_CODE;
     mbox_buffer[5] = 0; /* Value buffer */
@@ -123,7 +124,7 @@ void kernel()
     uint32_t base, size, frev;
     
     get_arm_memory(&base, &size);
-    get_firm_revision(&frev);
+    get_board_revision(&frev);
     
     uart_sendstr("@Arm base memory: ");
     lutoa(buf, base, 16);
@@ -135,7 +136,7 @@ void kernel()
     uart_sendstr(buf);
     uart_send('\n');
     
-    uart_sendstr("@Firmware revision: ");
+    uart_sendstr("@Board revision: ");
     lutoa(buf, frev, 16);
     uart_sendstr(buf);
     uart_send('\n');

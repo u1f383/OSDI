@@ -21,7 +21,6 @@ master:
     # Clean bss
     ldr x0, =__bss_start
     ldr x1, =__bss_end
-    sub x1, x1, x0
     bl memzero
     b kernel
 
@@ -33,6 +32,6 @@ memzero:
     ret
 
 slave:
-    # Wait for interrupt
-    wfi
+    # Wait for interrupt event
+    wfe
     b slave
