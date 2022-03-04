@@ -1,7 +1,7 @@
 #ifndef _GPIO_GPIO_H
 #define _GPIO_GPIO_H
 
-#include "util.h"
+#include <util.h>
 
 #define GPIO_PERIF_REG_MAP_BASE (PERIF_ADDRESS + 0x200000)
 

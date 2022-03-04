@@ -513,3 +513,80 @@ Mailbox
 - [Document](https://github.com/raspberrypi/firmware/wiki/Mailboxes)
 
 DLAB bit 存在於 `AUX_MU_LCR_REG`，如果為 1 的話就可以透過第一個 Mini Uart 的 register 來存取 baudrate register，但是在做 operation 時這個 bit 會被清掉。實際上存取 baudrate 可以直接用 `AUX_MU_IO_REG`，因此這個可以直接設為 0。
+
+
+
+Makefile
+
+- Example：
+
+  ```
+  targets : prerequisites
+          recipe
+          …
+  ```
+
+  - 如果沒有 prerequisites，就會去看 `target` 是否存在而不執行
+  - Rules without Recipes or Prerequisites
+    - 如果 rule 沒有 prerequisites，並且 `target` 不存在，在生成 `target` 後如果沒有更動 `target`，其會保持在最新的狀態，造成 `make` 沒有效果 (make: \`clean' is up to date.)
+    - 被加上 `.PHONY` 的 target 會不考慮 `target` 這個檔案是否存在
+
+- Substitution References - 將 value 換成指定的變數 (`${var:a=b}`)，舉例來說：
+
+  ```
+  foo := a.o b.o l.a c.o
+  bar := $(foo:.o=.c)
+  ```
+
+  那就會去把每個詞中結尾的 `a` 置換成 `b`，的到 `bat` 為 `'bar' to 'a.c b.c l.a c.c'.`
+
+- `FORCE` - 可以讓只要有指定 dependency 的檔案，每次就一定會執行 rule
+
+  ```
+  clean: FORCE
+          rm $(objects)
+  FORCE:
+  ```
+
+  - 其效力等同於 `.PHONY: clean`
+
+
+
+SD card 的內容 format：
+
+- MBR partition table - 紀錄有 boot 跟 rootfs
+- **boot** partition: 50 MB, fat32, LBA flag
+  - bootcode.bin - GPU code to start the GPU and load the GPU firmware
+  - start.elf - the GPU firmware. It reads `config.txt` and enables the GPU to load and run ARM specific user code from `kernel8.img`
+  - 不過 Raspberry Pi firmware files 都是 close-sourced 而且沒 document，但可以參考下面文章略知一二：
+    - https://raspberrypi.stackexchange.com/questions/10442/what-is-the-boot-sequence
+    - https://github.com/DieterReuter/workshop-raspberrypi-64bit-os/blob/master/part1-bootloader.md
+    - https://elinux.org/RPi_Software#Overview
+  - 流程大致如下：
+    - 第一階段的 bootloader 會從 on-ship ROM 執行，mount FAT32 **boot** partition 讓第二階段的 bootloader (`bootcode.bin`) 可以被存取，最後將其放到 L2 cache
+    - 第二階段的 bootloader 的目標為開啟 SDRAM，並且載入 **GPU firmware** 的 bootloader (`start.elf`)
+      - 在先前更新當中，`loader.bin` 的工作被 `bootcode.bin` 所取代，[commit log](https://github.com/raspberrypi/firmware/commit/c57ea9dd367f12bf4fb41b7b86806a2dc6281176)
+    - GPU firmware 透過 GPU 來啟動 CPU，讀取 `config.txt` 後根據內容載入設定，除此之外還會讀 `cmdline.txt`, `bcm2835.dtb`, `cmdline.txt` 等設定檔，並用檔案 `fixup.dat` 來初始化 GPU 與 CPU 之間的 SDRAM partition，最後載入 `start.elf` 來執行
+    - 最後執行 `kernel8.img`
+    - P.S. 一開始的執行都是透過 **GPU** 來執行，在最後才會在 ARM 執行 `kernel.img`
+- **rootfs** partition: remaining space, ext4
+- 實作可以參考： http://chaotangwang.blogspot.com/2014/01/raspberry-pi-project-build-personal.html
+
+
+
+
+
+## lab2
+
+`config.txt`
+
+- RPi 用 config.txt 來存系統參數，這個檔案會在 boot firmware 被讀，格式如下：
+
+  ```
+  # this is comment
+  property=value
+  ```
+
+  
+
+- 參考資料： https://www.raspberrypi.com/documentation/computers/config_txt.html

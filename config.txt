@@ -1,0 +1,8 @@
+# The memory which the kernel image should be loaded
+kernel_address=0x60000
+
+# Alt kernel image on the boot partition
+kernel=bootloader.img
+
+# Forces the kernel loading system to assume a 64-bit kernel
+arm_64bit=1

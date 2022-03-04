@@ -1,7 +1,7 @@
-#include "util.h"
-#include "gpio/uart.h"
-#include "gpio/base.h"
-#include "lib/printf.h"
+#include <util.h>
+#include <gpio/uart.h>
+#include <gpio/base.h>
+#include <lib/printf.h>
 
 #define PM_REG (PERIF_ADDRESS + 0x100000)
 #define PM_PASSWORD 0x5A000000
@@ -92,7 +92,7 @@ void get_arm_memory(uint32_t *base, uint32_t *size)
     mbox_buffer[1] = MAILBOX_REQ_CODE_PROC_REQ;
     /* Tags */
     mbox_buffer[2] = MAILBOX_TAG_GET_ARM_MEMORY;
-    mbox_buffer[3] = sizeof(uint32_t); /* Max value buffer size */
+    mbox_buffer[3] = 8; /* Max value buffer size */
     mbox_buffer[4] = MAILBOX_TAG_REQ_CODE;
     mbox_buffer[5] = 0; /* Value buffer [0] */
     mbox_buffer[6] = 0; /* Value buffer [1] */
@@ -142,17 +142,17 @@ void kernel()
             while (1);
         } else if (!strcmp(cmd, "mailbox")) {
             uart_sendstr("@Arm base memory: ");
-            lutoa(buf, base, 16);
+            lutostr(buf, base, 16);
             uart_sendstr(buf);
             uart_sendstr("\r\n");
             
             uart_sendstr("@Arm base size: ");
-            lutoa(buf, size, 16);
+            lutostr(buf, size, 16);
             uart_sendstr(buf);
             uart_sendstr("\r\n");
             
             uart_sendstr("@Board revision: ");
-            lutoa(buf, frev, 16);
+            lutostr(buf, frev, 16);
             uart_sendstr(buf);
             uart_sendstr("\r\n");
         }

@@ -1,8 +1,8 @@
 #ifndef _GPIO_UART_H_
 #define _GPIO_UART_H_
 
-#include "util.h"
-#include "base.h"
+#include <util.h>
+#include <gpio/base.h>
 
 /**
  * When mini UART is enabled, core clock is fixed to 250 MHz
@@ -16,7 +16,7 @@ void uart_init();
 void uart_send(char c);
 char uart_recv();
 
-void uart_sendstr(char *str);
+void uart_sendstr(const char *str);
 void uart_recvline(char *ptr);
 
 #endif /* _GPIO_UART_H_ */

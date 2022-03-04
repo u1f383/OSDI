@@ -58,6 +58,7 @@ typedef volatile uint64_t reg64;
 
 /* STRING OPERATION */
 int strcmp(const char *s1, const char *s2);
+int strcpy(char *s1, const char *s2);
 
 /* OTHER HELPER */
 void sleep(int cycles);

@@ -12,13 +12,15 @@ CFLAGS = -Wall \
 		-Iinclude
 
 BUILD_DIR = build
-SRC_DIR = src
+UBOOT = bootloader.img
 ELF = kernel8.elf
 IMG = kernel8.img # the 8 of kernel8 means ARMv8
-LINK_SCRIPT = linker.ld
+LINK_SCRIPT = scripts/linker.ld
+
 
 all: $(IMG)
 
+.PHONY: debug
 debug:
 	qemu-system-aarch64 -M raspi3b \
 						-kernel $(IMG) \
@@ -27,6 +29,7 @@ debug:
 						-display none \
 						-S -s
 
+.PHONY: run
 run:
 	qemu-system-aarch64 -M raspi3b \
 						-kernel $(IMG) \
@@ -34,23 +37,18 @@ run:
 						-serial stdio \
 						-display none
 
+.PHONY: clean
 clean:
 	rm -rf $(BUILD_DIR) $(IMG)
 
-$(BUILD_DIR)/%.o: $(SRC_DIR)/%.c
+SRC_FILES = $(shell find . -name "*.c") $(shell find . -name "*.S")
+OBJ_FILES = $(patsubst %,$(BUILD_DIR)/%.o,$(SRC_FILES))
+
+$(BUILD_DIR)/%.o: %
 	mkdir -p $(@D)
-	$(CROSS_COMPILER_PREFIX)-gcc $(CFLAGS) -MMD -c $< -o $@
+	$(CROSS_COMPILER_PREFIX)-gcc $(CFLAGS) -c $< -o $@
 
-$(BUILD_DIR)/%.o: $(SRC_DIR)/%.S
-	mkdir -p $(@D)
-	$(CROSS_COMPILER_PREFIX)-gcc $(CFLAGS) -MMD -c $< -o $@
-
-C_FILES = $(wildcard $(SRC_DIR)/**/*.c $(SRC_DIR)/*.c)
-ASM_FILES = $(wildcard $(SRC_DIR)/**/*.S $(SRC_DIR)/*.S)
-OBJ_FILES = $(C_FILES:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o)
-OBJ_FILES += $(ASM_FILES:$(SRC_DIR)/%.S=$(BUILD_DIR)/%.o)
-
-
-$(IMG): $(SRC_DIR)/$(LINK_SCRIPT) $(OBJ_FILES)
-	$(CROSS_COMPILER_PREFIX)-ld -T $(SRC_DIR)/$(LINK_SCRIPT) -o $(BUILD_DIR)/$(ELF) $(OBJ_FILES)
+$(IMG): $(LINK_SCRIPT) $(OBJ_FILES)
+	@echo $(SRC_FILES);
+	$(CROSS_COMPILER_PREFIX)-ld -T $(LINK_SCRIPT) -o $(BUILD_DIR)/$(ELF) $(OBJ_FILES)
 	$(CROSS_COMPILER_PREFIX)-objcopy $(BUILD_DIR)/$(ELF) -O binary $(IMG)

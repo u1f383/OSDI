@@ -1,6 +1,6 @@
-#include "gpio/uart.h"
-#include "gpio/gpio.h"
-#include "util.h"
+#include <gpio/uart.h>
+#include <gpio/gpio.h>
+#include <util.h>
 
 AuxRegs *aux_regs;
 
@@ -28,7 +28,7 @@ void uart_init()
     set_value(*GPIO_GPFSEL1_REG, 0b010, GPIO_FSEL14_BIT, GPIO_FSEL14_BIT + GPIO_FSEL_SIZE);
     set_value(*GPIO_GPFSEL1_REG, 0b010, GPIO_FSEL15_BIT, GPIO_FSEL15_BIT + GPIO_FSEL_SIZE);
     
-    /* Disable pull-up/down control */
+    /* Disable pull-up/down control because pins are always connected */
     set_value(*GPIO_GPPUD_REG, GPIO_GPPUD_Off, 0, sizeof(reg32));
     sleep(150);
     /* Send the modification signal to GPIO14/15 */
@@ -64,7 +64,7 @@ void uart_recvline(char *ptr)
     *ptr = '\0';
 }
 
-void uart_sendstr(char *str)
+void uart_sendstr(const char *str)
 {
     while (*str)
         uart_send(*str++);
