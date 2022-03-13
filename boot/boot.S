@@ -22,7 +22,7 @@ master:
     ldr x0, =__bss_start
     ldr x1, =__bss_end
     bl memzero
-    b kernel
+    b loader
 
 memzero:
     str xzr, [x0], #8

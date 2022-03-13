@@ -590,3 +590,8 @@ SD card 的內容 format：
   
 
 - 參考資料： https://www.raspberrypi.com/documentation/computers/config_txt.html
+
+
+
+
+

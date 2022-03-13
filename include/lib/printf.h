@@ -1,5 +1,5 @@
-#ifndef _PRINTF_H_
-#define _PRINTF_H_
+#ifndef _LIB_PRINTF_H_
+#define _LIB_PRINTF_H_
 
 #include <util.h>
 #include <stdarg.h>
@@ -24,4 +24,4 @@ int utostr(char *nptr, uint32_t value, int base);
 int itostr(char *nptr, int32_t value, int base);
 
 
-#endif /* _PRINTF_H_ */
+#endif /* _LIB_PRINTF_H_ */

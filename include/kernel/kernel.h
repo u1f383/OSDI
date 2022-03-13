@@ -1,0 +1,7 @@
+#ifndef _KERNEL_KERNEL_H_
+#define _KERNEL_KERNEL_H_
+
+#define KERNEL_BASE_ADDR 0x800000
+
+
+#endif /* _KERNEL_KERNEL_H_ */
