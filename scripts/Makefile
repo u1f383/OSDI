@@ -1,4 +1,6 @@
 all: client
 
+BUILD_DIR = ../build
+
 client: client.c
-	gcc -o $@ -I../include $<
+	gcc -o $(BUILD_DIR)/$@ -I../include $<

@@ -74,6 +74,16 @@ enum {
     MAX_NR_ZONES
 };
 
+struct _Pg_data;
+typedef struct _Zone {
+    /* Used by buddy system */
+    struct free_area free_area[MAX_ORDER];
+    /* The first page in the global mem_map this zone refers to */
+    Page *zone_mem_map;
+    /* Point to parent node */
+    struct _Pg_data *zone_pgdat;
+} Zone;
+
 /* We only support UMA */
 typedef struct _Pg_data {
     /* The zones for this node */
@@ -82,13 +92,15 @@ typedef struct _Pg_data {
     Page *node_mem_map;
 } Pg_data;
 
-typedef struct _Zone {
-    /* Used by buddy system */
-    struct free_area free_area[MAX_ORDER];
-    /* The first page in the global mem_map this zone refers to */
-    Page *zone_mem_map;
-    /* Point to parent node */
-    Pg_data *zone_pgdat;
-} Zone;
+static void mem_map_init();
+static void node_init();
+static void _zone_dma_init(Pg_data *pgdat, Zone *zone);
+
+void buddy_init(struct free_area *free_area, int32_t order,
+                uint64_t _spfn, uint64_t _epfn);
+
+Page *buddy_split_2(Page *buddy);
+void *buddy_alloc(uint64_t pg_sz);
+void buddy_free(void *phys_addr);
 
 #endif /* _ARM_MM_H_ */

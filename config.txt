@@ -1,6 +1,3 @@
-# The memory which the kernel image should be loaded
-kernel_address=0x60000
-
 # Alt kernel image on the boot partition
 kernel=bootloader.img
 

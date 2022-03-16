@@ -1,4 +1,7 @@
+#include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
+#include <string.h>
 #include <fcntl.h>
 #include <errno.h>
 #include <stdint.h>
@@ -113,7 +116,7 @@ int ser_recvuntil(Serial *self, const char *msg)
         }
 
         curr += 1;
-        if (search_data(self->fd, curr, msg, msglen) != -1)
+        if (search_data(self->buf, curr, msg, msglen) != -1)
             return curr;
     }
 
@@ -189,14 +192,6 @@ void release_packet(Packet *packet)
     free(packet);
 }
 
-static inline uint8_t calc_checksum(const unsigned char *data, uint32_t sz)
-{
-    uint8_t sum;
-    for (int i = 0; i < sz; i++)
-        sum += data[i];
-    return sum;
-}
-
 int conn_req(Serial *ser)
 {
     int ret_sz;
@@ -256,7 +251,7 @@ int tx_file(Serial *ser, const char *filename)
 int conn_end(Serial *ser)
 {
     Packet *tx_packet = new_packet();
-    Packet *rx_packet = ser->buf;
+    Packet *rx_packet = (Packet *) ser->buf;
     int retval;
 
     tx_packet->metadata = END;

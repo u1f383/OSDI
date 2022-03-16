@@ -1,9 +1,6 @@
 #ifndef _TXRX_TXRX_H_
 #define _TXRX_TXRX_H_
 
-#include <util.h>
-#include <types.h>
-
 /**
 @ Transmission Protocol
 
@@ -39,10 +36,10 @@ A is server, B is client
 
 typedef struct _Packet
 {
-    uint32_t id;
-    uint8_t metadata;
-    uint8_t checksum;
-    uint16_t size;
+    unsigned int id;
+    unsigned char metadata;
+    unsigned char checksum;
+    unsigned short size;
     unsigned char data[0];
 } Packet;
 
@@ -58,9 +55,9 @@ typedef struct _Packet
 Packet *new_packet();
 void release_packet(Packet *packet);
 
-static inline uint8_t calc_checksum(const unsigned char *data, uint32_t sz)
+static inline unsigned int calc_checksum(const unsigned char *data, unsigned int sz)
 {
-    uint8_t sum;
+    unsigned int sum = 0;
     for (int i = 0; i < sz; i++)
         sum += data[i];
     return sum;

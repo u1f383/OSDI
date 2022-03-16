@@ -50,14 +50,14 @@ static void mem_map_init()
     {
         curr = pfn_to_page(i);
         INIT_PAGE(curr);
-        list_add_tail(&curr->list, mem_map);
+        list_add_tail(&curr->list, &mem_map->list);
     }
 
     /* _pg_data struct is followed by mem_map */
     pg_data_addr = pfn_to_phys(epfn);
 }
 
-void node_init()
+static void node_init()
 {
     _pg_data = (Pg_data *) pg_data_addr;
     _pg_data->node_mem_map = mem_map;
@@ -65,7 +65,7 @@ void node_init()
     _zone_dma_init(_pg_data, &_pg_data->node_zones[ ZONE_DMA ]);
 }
 
-void _zone_dma_init(Pg_data *pgdat, Zone *zone)
+static void _zone_dma_init(Pg_data *pgdat, Zone *zone)
 {
     zone->zone_mem_map = mem_map;
     zone->zone_pgdat = pgdat;
@@ -108,7 +108,8 @@ void buddy_init(struct free_area *free_area,
         pg_prev = pg_cur;
     }
 
-    free_area->free_list = pfn_to_page(_spfn);
+    pg_cur = pfn_to_page(_spfn);
+    free_area->free_list = &pg_cur->list;
     free_area->nr_free = cnt;
 }
 
@@ -119,7 +120,7 @@ void *buddy_alloc(uint64_t pg_sz)
     Zone *node_zone = _pg_data->node_zones;
 
     if (order > MAX_ORDER)
-        return;
+        return NULL;
 
     Page *buddy;
     while (order <= MAX_ORDER)
@@ -154,7 +155,7 @@ void *buddy_alloc(uint64_t pg_sz)
 
 Page *buddy_split_2(Page *buddy)
 {
-    
+    return NULL;   
 }
 
 void buddy_free(void *phys_addr)
@@ -178,5 +179,5 @@ void buddy_free(void *phys_addr)
     /* Insert into corresponding buddy system order */
     Zone *node_zone = _pg_data->node_zones;
     buddy->free_list = node_zone->free_area[order].free_list;
-    node_zone->free_area[order].free_list = buddy;
+    node_zone->free_area[order].free_list = &buddy->list;
 }

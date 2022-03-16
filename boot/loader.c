@@ -14,6 +14,8 @@
 void reset(int tick);
 void cancel_reset();
 
+char *kernel_addr;
+
 /* Reboot pi after watchdog timer expire */
 void reset(int tick)
 {
@@ -121,19 +123,17 @@ void usage()
 
 void load_kernel()
 {
-    char *kernel_addr = (char *) KERNEL_BASE_ADDR;
+    kernel_addr = (char *) KERNEL_BASE_ADDR;
 }
 
-__attribute__((naked)) void run_kernel()
+__attribute__((noreturn))
+void run_kernel()
 {
-    __asm__(
-        ".global run_kernel\n"
-        "run_kernel:\n"
-        "b " STR(KERNEL_BASE_ADDR)
-    );
+    ( *(void(*)()) kernel_addr )();
+    while (1);
 }
 
-void kernel()
+void loader()
 {
     uart_init();
     printf_init(uart_sendstr);
@@ -174,7 +174,7 @@ void kernel()
         } else if (!strcmp(cmd, "load kernel")) {
             load_kernel();
         } else if (!strcmp(cmd, "run kernel")) {
-            run_kernel( KERNEL_BASE_ADDR );
+            run_kernel();
         }
     }
 }

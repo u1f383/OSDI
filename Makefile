@@ -12,18 +12,25 @@ CFLAGS = -Wall \
 		-Iinclude
 
 BUILD_DIR = build
-UBOOT = bootloader.img
-ELF = kernel8.elf
-IMG = kernel8.img # The 8 of kernel8 means ARMv8
-LINK_SCRIPT = scripts/linker.ld
+BOOT_DIR = boot
+KERNEL_DIR = kernel
+SCRIPT_DIR = scripts
+
+UBOOT_IMG = bootloader.img
+UBOOT_ELF = bootloader.elf
+
+KERN_IMG = kernel8.img # The 8 of kernel8 means ARMv8
+KERN_ELF = kernel8.elf
+
+LINK_SCRIPT = $(SCRIPT_DIR)/linker.ld
 
 
-all: $(IMG)
+all: $(KERN_IMG) $(UBOOT_IMG)
 
 .PHONY: debug
 debug:
 	qemu-system-aarch64 -M raspi3b \
-						-kernel $(IMG) \
+						-kernel $(KERN_IMG) \
 						-serial null \
 						-serial stdio \
 						-display none \
@@ -32,25 +39,54 @@ debug:
 .PHONY: run
 run:
 	qemu-system-aarch64 -M raspi3b \
-						-kernel $(IMG) \
+						-kernel $(KERN_IMG) \
 						-serial null \
 						-serial stdio \
 						-display none
 
 .PHONY: clean
 clean:
-	rm -rf $(BUILD_DIR) $(IMG)
+	rm -rf $(BUILD_DIR) $(KERN_IMG) $(UBOOT_IMG)
 
-SRC_FILES = $(shell find . -name "*.c") $(shell find . -name "*.S")
-DEP_FILES = $(patsubst %,$(BUILD_DIR)/%.d,$(SRC_FILES))
-OBJ_FILES = $(patsubst %,$(BUILD_DIR)/%.o,$(SRC_FILES))
+.PHONY: client
+client:
+	make -C $(SCRIPT_DIR)
 
--include DEP_FILES
+UBOOT_SRC_FILES = $(shell find "./$(BOOT_DIR)" -name "*.c") $(shell find "./$(BOOT_DIR)" -name "*.S")
+UBOOT_DEP_FILES = $(patsubst %,$(BUILD_DIR)/%.d,$(UBOOT_SRC_FILES))
+UBOOT_OBJ_FILES = $(patsubst %,$(BUILD_DIR)/%.o,$(UBOOT_SRC_FILES))
+-include UBOOT_DEP_FILES
+
+KERN_SRC_FILES = $(shell find "./$(KERNEL_DIR)" -name "*.c")
+KERN_DEP_FILES = $(patsubst %,$(BUILD_DIR)/%.d,$(KERN_SRC_FILES))
+KERN_OBJ_FILES = $(patsubst %,$(BUILD_DIR)/%.o,$(KERN_SRC_FILES))
+-include KERN_DEP_FILES
+
+LIB_SRC_FILES = $(shell find . -name "*.c"  ! -path "./$(BOOT_DIR)/*"    \
+											! -path "./$(KERNEL_DIR)/*"  \
+											! -path "./$(SCRIPT_DIR)/*"  )
+LIB_DEP_FILES = $(patsubst %,$(BUILD_DIR)/%.d,$(LIB_SRC_FILES))
+LIB_OBJ_FILES = $(patsubst %,$(BUILD_DIR)/%.o,$(LIB_SRC_FILES))
+-include LIB_DEP_FILES
+
+test:
+	@echo $(LIB_OBJ_FILES)
 
 $(BUILD_DIR)/%.o: %
 	mkdir -p $(@D)
 	$(CROSS_COMPILER_PREFIX)-gcc $(CFLAGS) -MMD -c $< -o $@
 
-$(IMG): $(LINK_SCRIPT) $(OBJ_FILES)
-	$(CROSS_COMPILER_PREFIX)-ld -T $(LINK_SCRIPT) -o $(BUILD_DIR)/$(ELF) $(OBJ_FILES)
-	$(CROSS_COMPILER_PREFIX)-objcopy $(BUILD_DIR)/$(ELF) -O binary $(IMG)
+$(KERN_IMG): $(LINK_SCRIPT) $(KERN_OBJ_FILES) $(LIB_OBJ_FILES)
+	$(CROSS_COMPILER_PREFIX)-ld -T $(LINK_SCRIPT) -o $(BUILD_DIR)/$(KERN_ELF) $(KERN_OBJ_FILES)
+	$(CROSS_COMPILER_PREFIX)-objcopy $(BUILD_DIR)/$(KERN_ELF) -O binary $(KERN_IMG)
+
+$(LIB_IMG): $(LINK_SCRIPT) $(LIB_OBJ_FILES)
+	$(CROSS_COMPILER_PREFIX)-ld -T $(LINK_SCRIPT) -o $(BUILD_DIR)/$(LIB_ELF) $(LIB_OBJ_FILES)
+	$(CROSS_COMPILER_PREFIX)-objcopy $(BUILD_DIR)/$(LIB_ELF) -O binary $(LIB_IMG)
+
+.PHONY: boot
+boot: $(UBOOT_IMG)
+
+$(UBOOT_IMG): $(LINK_SCRIPT) $(UBOOT_OBJ_FILES) $(LIB_OBJ_FILES)
+	$(CROSS_COMPILER_PREFIX)-ld -T $(LINK_SCRIPT) -o $(BUILD_DIR)/$(UBOOT_ELF) $(UBOOT_OBJ_FILES) $(LIB_OBJ_FILES)
+	$(CROSS_COMPILER_PREFIX)-objcopy $(BUILD_DIR)/$(UBOOT_ELF) -O binary $(UBOOT_IMG)
