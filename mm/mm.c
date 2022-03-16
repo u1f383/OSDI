@@ -8,7 +8,7 @@ Pg_data *_pg_data;
 addr_t pg_data_addr;
 
 #define phys_to_pfn(_phys_addr) ((((addr_t) _phys_addr) >> PAGE_SHIFT) - PFN_BASE_OFFSET)
-#define pfn_to_phys(pfn) ( MM_PHYS_MEMORY_START + ((pfn + PFN_BASE_OFFSET) << 12) )
+#define pfn_to_phys(pfn) ( (pfn + PFN_BASE_OFFSET) << PAGE_SHIFT )
 
 #define page_to_pfn(_page) ( (((uint64_t) _page) - ((uint64_t) mem_map)) / sizeof(Page) )
 #define pfn_to_page(pfn) (mem_map + pfn)
@@ -28,20 +28,20 @@ kmap() creates a mapping in kernel for an arbitrary physical page (can be from h
         _page->list = (struct list_head) { NULL, NULL }; \
         _page->flags = PG_init;                          \
         _page->order = NON_ORDER;                        \
-        _page->free_list = NULL;                         \
+        _page->private.free_pg = NULL;                   \
         _page->index = UN_INDEX;                         \
     } while (0)
 
-static void mem_map_init()
+void mem_map_init()
 {
     addr_t mem_start = MM_PHYS_MEMORY_START;
     addr_t mem_end = MM_PHYS_MEMORY_END;
 
-    spfn = phys_to_pfn(mem_start);
+    spfn = 0;
     epfn = phys_to_pfn(mem_end);
 
     /* Initialize global mem_map */
-    mem_map = pfn_to_page(spfn);
+    mem_map = (Page *) mem_start;
     INIT_PAGE(mem_map);
     LIST_INIT(mem_map->list);
 
@@ -54,27 +54,7 @@ static void mem_map_init()
     }
 
     /* _pg_data struct is followed by mem_map */
-    pg_data_addr = pfn_to_phys(epfn);
-}
-
-static void node_init()
-{
-    _pg_data = (Pg_data *) pg_data_addr;
-    _pg_data->node_mem_map = mem_map;
-
-    _zone_dma_init(_pg_data, &_pg_data->node_zones[ ZONE_DMA ]);
-}
-
-static void _zone_dma_init(Pg_data *pgdat, Zone *zone)
-{
-    zone->zone_mem_map = mem_map;
-    zone->zone_pgdat = pgdat;
-
-    for (int i = 0; i < MAX_ORDER; i++)
-        zone->free_area[i].free_list = NULL;
-
-    buddy_init(&zone->free_area[MAX_ORDER - 1],
-                MAX_ORDER, spfn, epfn);
+    pg_data_addr = (addr_t) pfn_to_page(epfn);
 }
 
 void buddy_init(struct free_area *free_area,
@@ -86,26 +66,31 @@ void buddy_init(struct free_area *free_area,
     uint64_t idx = 0;
     uint32_t cnt = 0;
 
-    for (int i = _spfn; i < _epfn; i++)
+    for (int i = _spfn; i < _epfn;)
     {
+        idx = i;
         pg_cur = pfn_to_page(i);
         pg_cur->flags = PG_buddy;
         pg_cur->order = order;
         pg_cur->index = idx;
         
-        idx = i;
+        if (pg_prev)
+            pg_prev->private.free_pg = pg_cur;
+        pg_prev = pg_cur;
+        
+        if (i + (1 << order) >= _epfn)
+            break;
+
         cnt++; i++;
-        while (i % (1 << (order - 1)) && i < _epfn)
+        pg_cur = container_of(pg_cur->list.next, Page, list);
+        while ( i % (1 << order) )
         {
-            pg_cur->flags = PG_buddy;
             pg_cur->order = BODY_ORDER;
+            pg_cur->flags = PG_buddy;
             pg_cur->index = idx;
             pg_cur = container_of(pg_cur->list.next, Page, list);
+            i++;
         }
-
-        if (pg_prev)
-            pg_prev->free_list = pg_cur;
-        pg_prev = pg_cur;
     }
 
     pg_cur = pfn_to_page(_spfn);
@@ -119,11 +104,11 @@ void *buddy_alloc(uint64_t pg_sz)
     int32_t order = log_2(ceil_sz);
     Zone *node_zone = _pg_data->node_zones;
 
-    if (order > MAX_ORDER)
+    if (order >= MAX_ORDER)
         return NULL;
 
-    Page *buddy;
-    while (order <= MAX_ORDER)
+    Page *buddy = NULL;
+    while (order < MAX_ORDER)
     {
         if (!node_zone->free_area[order].free_list) {
             order++;
@@ -131,53 +116,103 @@ void *buddy_alloc(uint64_t pg_sz)
         }
         
         buddy = container_of(node_zone->free_area[order].free_list, Page, list);
+        if (buddy->private.free_pg)
+            node_zone->free_area[order].free_list = &buddy->private.free_pg->list;
+        else
+            node_zone->free_area[order].free_list = NULL;
+        
         /* Split into 2 buddies */
-        if (ceil_sz > pg_sz*2)
+        while ((1 << order) >= ceil_sz)
         {
-            Page *buddy_2 = buddy_split_2(buddy);
-            buddy_free(buddy_2);
+            buddy_split_2(buddy, node_zone);
+            order--;
         }
-            
-        /* Update free_list to next */
-        node_zone->free_area[order].free_list = buddy->free_list;
+        break;
     }
+
+    if (!buddy)
+        return NULL;
 
     Page *pg_cur = buddy;
     for (int i = 0; i < (1 << order); i++) {
         pg_cur->order = ALLOC_ORDER;
         pg_cur->flags = PG_inuse;
-        pg_cur->free_list = buddy;
+        pg_cur->private.free_pg = NULL;
         pg_cur = container_of(pg_cur->list.next, Page, list);
     }
 
-    return page_to_phys(buddy);
+    return (void *) page_to_phys(buddy);
 }
 
-Page *buddy_split_2(Page *buddy)
+void buddy_split_2(Page *buddy_hdr, Zone *zone)
 {
-    return NULL;   
+    int32_t new_order = buddy_hdr->order - 1;
+    Page *buddy_2 = buddy_hdr + (1 << new_order);
+
+    /* Update buddy */
+    buddy_hdr->order = new_order;
+
+    /* Update buddy2 */
+    buddy_2->order = new_order;
+    buddy_2->flags = PG_buddy;
+    buddy_2->index = page_to_pfn(buddy_2);
+
+    Page *pg_cur = container_of(buddy_2->list.next, Page, list);
+    for (int i = 1; i < (1 << new_order); i++)
+    {
+        pg_cur->index = buddy_2->index;
+        pg_cur = container_of(pg_cur->list.next, Page, list);
+    }
+
+    /* Update buddy2 freelist */
+    if (zone->free_area[new_order].free_list)
+        buddy_2->private.free_pg = container_of(zone->free_area[new_order].free_list, Page, list);
+    else
+        buddy_2->private.free_pg = NULL;
+    zone->free_area[new_order].free_list = &buddy_2->list;
 }
 
 void buddy_free(void *phys_addr)
 {
-    uint64_t pg_sz = 0;
-    Page *buddy = phys_to_page(phys_addr);
+    // uint64_t pg_sz = 0;
+    // Page *buddy = phys_to_page(phys_addr);
 
-    Page *pg_cur = buddy;
-    while (pg_cur->index == buddy->index)
-    {
-        pg_cur->flags = PG_buddy;
-        pg_cur->order = BODY_ORDER;
-        pg_cur = container_of(pg_cur->list.next, Page, list);
+    // Page *pg_cur = buddy;
+    // while (pg_cur->index == buddy->index)
+    // {
+    //     pg_cur->flags = PG_buddy;
+    //     pg_cur->order = BODY_ORDER;
+    //     pg_cur->private.free_pg = NULL;
+    //     pg_cur = container_of(pg_cur->list.next, Page, list);
         
-        pg_sz++;
-    }
+    //     pg_sz++;
+    // }
 
-    int32_t order = log_2(pg_sz);
-    buddy->order = order+1;
+    // int32_t order = log_2(pg_sz);
+    // buddy->order = order;
 
-    /* Insert into corresponding buddy system order */
-    Zone *node_zone = _pg_data->node_zones;
-    buddy->free_list = node_zone->free_area[order].free_list;
-    node_zone->free_area[order].free_list = &buddy->list;
+    // /* Insert into corresponding buddy system order */
+    // Zone *node_zone = _pg_data->node_zones;
+    // buddy->free_list = node_zone->free_area[order].free_list;
+    // node_zone->free_area[order].free_list = &buddy->list;
+}
+
+static void _zone_dma_init(Pg_data *pgdat, Zone *zone)
+{
+    zone->zone_mem_map = mem_map;
+    zone->zone_pgdat = pgdat;
+
+    for (int i = 0; i < MAX_ORDER; i++)
+        zone->free_area[i].free_list = NULL;
+
+    buddy_init(&zone->free_area[MAX_ORDER - 1],
+                MAX_ORDER - 1, spfn, epfn);
+}
+
+void node_init()
+{
+    _pg_data = (Pg_data *) pg_data_addr;
+    _pg_data->node_mem_map = mem_map;
+
+    _zone_dma_init(_pg_data, &_pg_data->node_zones[ ZONE_DMA ]);
 }

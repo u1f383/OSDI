@@ -12,7 +12,7 @@ int strcmp(const char *s1, const char *s2)
 
 int strcpy(char *s1, const char *s2)
 {
-    char *org = s2;
+    const char *org = s2;
     while (*s2) {
         *s1 = *s2;
         s1++;
@@ -37,6 +37,12 @@ void memcpy(char *s1, const char *s2, uint32_t sz)
         s1++;
         s2++;
     }
+}
+
+void memset(char *s1, char c, uint32_t sz)
+{
+    while (sz--)
+        *s1++ = c;
 }
 
 __asm__(
@@ -72,11 +78,14 @@ uint64_t ceiling_2(uint64_t value)
 
 uint8_t log_2(uint64_t value)
 {
+    if (value == 0)
+        return 0;
+
     uint8_t _bit = 0;
     while (value)
     {
         _bit++;
         value >>= 1;
     }
-    return _bit;
+    return _bit - 1;
 }

@@ -7,3 +7,6 @@ test.dSYM
 kernel8.img
 bootloader.img
 client
+rootfs
+initramfs.cpio
+bcm2710-rpi-3-b-plus.dtb

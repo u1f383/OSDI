@@ -12,7 +12,7 @@ _start:
     ldr x2, =_start
     ldr x3, =_end
 
-qcp_boot:
+cp_boot:
     ldr x4, [x2], #8
     str x4, [x1], #8
     cmp x2, x3
@@ -24,8 +24,8 @@ qcp_boot:
     add x0, x0, x1
     br x0
 
-    # TODO: Disable interrupt
 _real_start:    
+    # TODO: Disable interrupt
     mrs x0, mpidr_el1
     # Get the core number
     and x0, x0, #0xff

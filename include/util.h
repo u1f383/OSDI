@@ -50,6 +50,7 @@ int strcpy(char *s1, const char *s2);
 /* MEMORY OPERATION */
 int memcmp(const char *dst, const char *src, uint32_t sz);
 void memcpy(char *dst, const char *src, uint32_t sz);
+void memset(char *s1, char c, uint32_t sz);
 
 /* MATH OPERATION */
 uint64_t ceiling_2(uint64_t value);

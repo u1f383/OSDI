@@ -11,13 +11,14 @@
 #include <list.h>
 
 #define MM_PHYS_MEMORY_START 0x21000000
-#define MM_PHYS_MEMORY_END (1 * GB - 1)
+#define MM_PHYS_MEMORY_END (1 * GB)
+#define MM_PHYS_MEMORY_RESERVED (32 * MB)
 #define NR_PAGE 0x1f000 /* (END - START) / PAGE_SIZE */
 #define MM_MEMORY_BIT 30 /* 1GB */
 #define PAGE_SIZE (4 * KB)
 #define PAGE_SHIFT 12
 
-#define PFN_BASE_OFFSET (MM_PHYS_MEMORY_START >> PAGE_SHIFT)
+#define PFN_BASE_OFFSET ((MM_PHYS_MEMORY_START + MM_PHYS_MEMORY_RESERVED) >> PAGE_SHIFT)
 
 /**
  * Buddy System Implementation
@@ -26,7 +27,7 @@
  */
 
 /* (2^i) * PAGE_SIZE */
-#define NON_ORDER 0
+#define NON_ORDER (-64)
 #define BODY_ORDER (-128)
 #define ALLOC_ORDER (-256)
 #define MAX_ORDER 11
@@ -60,9 +61,13 @@ struct free_area {
 typedef struct _Page {
     struct list_head list;
     uint64_t flags;
-    int64_t index;
+    int64_t index; /* The pfn of buddy header */
     int32_t order; /* Order of buddy system */
-    void *free_list;
+    union
+    {
+        struct _Page *free_pg;
+    } private;
+    
 } Page;
 
 /**
@@ -92,15 +97,14 @@ typedef struct _Pg_data {
     Page *node_mem_map;
 } Pg_data;
 
-static void mem_map_init();
-static void node_init();
-static void _zone_dma_init(Pg_data *pgdat, Zone *zone);
+void mem_map_init();
+void node_init();
 
 void buddy_init(struct free_area *free_area, int32_t order,
                 uint64_t _spfn, uint64_t _epfn);
 
-Page *buddy_split_2(Page *buddy);
 void *buddy_alloc(uint64_t pg_sz);
+void buddy_split_2(Page *buddy_hdr, Zone *zone);
 void buddy_free(void *phys_addr);
 
 #endif /* _ARM_MM_H_ */
