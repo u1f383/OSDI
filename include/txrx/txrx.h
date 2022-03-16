@@ -2,6 +2,7 @@
 #define _TXRX_TXRX_H_
 
 #include <util.h>
+#include <types.h>
 
 /**
 @ Transmission Protocol
@@ -25,8 +26,8 @@ A is server, B is client
 4. A <--------< PED Packet >-------- B
 5. A --< OK packet (per 65536) >---> B
 ---  if failed, B will resend data ---
-6. A <-----< FIN packet * 3 >------- B
-7. A ------< FIN packet * 3 >------> B
+6. A <-------< FIN packet >--------- B
+7. A --------< FIN packet >--------> B
 ------------ END transmit ------------
 **/
 #define MAGIC_1 0x54875487
@@ -42,15 +43,27 @@ typedef struct _Packet
     uint8_t metadata;
     uint8_t checksum;
     uint16_t size;
-    char data[0];
+    unsigned char data[0];
 } Packet;
 
 #define FIN 0b00000001
 #define PED 0b00000010
-#define OK  0b00000100
+#define END 0b00001000
+#define OK  0b00010000
 
-#define is_pending(packet) (packet->metadata & PED)
-#define is_finished(packet) (packet->metadata & FIN)
-#define is_ok(packet) (packet->metadata & OK)
+#define is_pending(packet) (((Packet *)packet)->metadata & PED)
+#define is_finished(packet) (((Packet *)packet)->metadata & FIN)
+#define is_ok(packet) (((Packet *)packet)->metadata & OK)
+
+Packet *new_packet();
+void release_packet(Packet *packet);
+
+static inline uint8_t calc_checksum(const unsigned char *data, uint32_t sz)
+{
+    uint8_t sum;
+    for (int i = 0; i < sz; i++)
+        sum += data[i];
+    return sum;
+}
 
 #endif /* _TXRX_TXRX_H_ */

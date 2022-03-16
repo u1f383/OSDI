@@ -2,11 +2,12 @@
 #define _LIB_PRINTF_H_
 
 #include <util.h>
+#include <types.h>
 #include <stdarg.h>
 
 typedef void (*PRINT_FPTR)(const char *);
 
-extern PRINT_FPTR __print;
+extern PRINT_FPTR __print_func;
 
 void printf_init(PRINT_FPTR pf);
 int printf(const char *fmt, ...);

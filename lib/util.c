@@ -1,4 +1,5 @@
 #include <util.h>
+#include <types.h>
 
 int strcmp(const char *s1, const char *s2)
 {
@@ -11,13 +12,31 @@ int strcmp(const char *s1, const char *s2)
 
 int strcpy(char *s1, const char *s2)
 {
-    char **org = &s2;
+    char *org = s2;
     while (*s2) {
         *s1 = *s2;
         s1++;
         s2++;
     }
-    return s2 - *org;
+    return s2 - org;
+}
+
+int memcmp(const char *s1, const char *s2, uint32_t sz)
+{
+    while (sz-- && *s1 == *s2) {
+        s1++;
+        s2++;
+    }
+    return *s1 - *s2;
+}
+
+void memcpy(char *s1, const char *s2, uint32_t sz)
+{
+    while (sz--) {
+        *s1 = *s2;
+        s1++;
+        s2++;
+    }
 }
 
 __asm__(
@@ -27,3 +46,37 @@ __asm__(
     "cbnz x0, sleep\n"
     "ret\n"
 );
+
+uint64_t ceiling_2(uint64_t value)
+{
+    if (value == 0)
+        return 0;
+
+    int cnt = 0;
+    int _bit = -1;
+
+    while (value)
+    {
+        if (value & 1)
+            cnt++;
+        
+        _bit++;
+        value >>= 1;
+    }
+
+    if (cnt > 1)
+        return (1 << (_bit + 1));
+    
+    return 1 << _bit;
+}
+
+uint8_t log_2(uint64_t value)
+{
+    uint8_t _bit = 0;
+    while (value)
+    {
+        _bit++;
+        value >>= 1;
+    }
+    return _bit;
+}

@@ -14,7 +14,7 @@ CFLAGS = -Wall \
 BUILD_DIR = build
 UBOOT = bootloader.img
 ELF = kernel8.elf
-IMG = kernel8.img # the 8 of kernel8 means ARMv8
+IMG = kernel8.img # The 8 of kernel8 means ARMv8
 LINK_SCRIPT = scripts/linker.ld
 
 

@@ -2,11 +2,11 @@
 #include <util.h>
 #include <stdarg.h>
 
-PRINT_FPTR __print;
+PRINT_FPTR __print_func;
 
 void printf_init(PRINT_FPTR pf)
 {
-    __print = pf;
+    __print_func = pf;
 }
 
 /* Only support base 10 and 16 now */
@@ -139,7 +139,8 @@ int vsprintf(char *buf, const char *fmt, va_list args)
             else if (ch == 'p')
             {
                 uint64_t addr = (uint64_t)va_arg(args, void *);
-                buf += utostr(buf, addr, 16);
+                buf += strcpy(buf, "0x");
+                buf += lutostr(buf, addr, 16);
             }
             else if (ch == 's')
             {
@@ -181,8 +182,6 @@ int printf(const char *fmt, ...)
     count = vsprintf(buf, fmt, args);
     va_end(args);
 
-    __print(buf);
+    __print_func(buf);
     return count;
 }
-
-/* TODO */

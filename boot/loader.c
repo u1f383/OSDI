@@ -1,4 +1,5 @@
 #include <util.h>
+#include <types.h>
 #include <txrx/txrx.h>
 #include <gpio/uart.h>
 #include <gpio/base.h>
@@ -123,6 +124,15 @@ void load_kernel()
     char *kernel_addr = (char *) KERNEL_BASE_ADDR;
 }
 
+__attribute__((naked)) void run_kernel()
+{
+    __asm__(
+        ".global run_kernel\n"
+        "run_kernel:\n"
+        "b " STR(KERNEL_BASE_ADDR)
+    );
+}
+
 void kernel()
 {
     uart_init();
@@ -161,10 +171,10 @@ void kernel()
             lutostr(buf, frev, 16);
             uart_sendstr(buf);
             uart_sendstr("\r\n");
-        } else if (!strcmp(cmd, "load_kernel")) {
-
-        } else if (!strcmp(cmd, "run_kernel")) {
-
+        } else if (!strcmp(cmd, "load kernel")) {
+            load_kernel();
+        } else if (!strcmp(cmd, "run kernel")) {
+            run_kernel( KERNEL_BASE_ADDR );
         }
     }
 }
