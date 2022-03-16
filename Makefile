@@ -30,27 +30,23 @@ all: $(KERN_IMG) $(UBOOT_IMG)
 .PHONY: debug
 debug:
 	qemu-system-aarch64 -M raspi3b \
-						-kernel $(KERN_IMG) \
+						-kernel $(UBOOT_IMG) \
 						-serial null \
-						-serial stdio \
+						-serial pty \
 						-display none \
 						-S -s
 
 .PHONY: run
 run:
 	qemu-system-aarch64 -M raspi3b \
-						-kernel $(KERN_IMG) \
+						-kernel $(UBOOT_IMG) \
 						-serial null \
-						-serial stdio \
+						-serial pty \
 						-display none
 
 .PHONY: clean
 clean:
 	rm -rf $(BUILD_DIR) $(KERN_IMG) $(UBOOT_IMG)
-
-.PHONY: client
-client:
-	make -C $(SCRIPT_DIR)
 
 UBOOT_SRC_FILES = $(shell find "./$(BOOT_DIR)" -name "*.c") $(shell find "./$(BOOT_DIR)" -name "*.S")
 UBOOT_DEP_FILES = $(patsubst %,$(BUILD_DIR)/%.d,$(UBOOT_SRC_FILES))
@@ -69,8 +65,14 @@ LIB_DEP_FILES = $(patsubst %,$(BUILD_DIR)/%.d,$(LIB_SRC_FILES))
 LIB_OBJ_FILES = $(patsubst %,$(BUILD_DIR)/%.o,$(LIB_SRC_FILES))
 -include LIB_DEP_FILES
 
+FILTER = $(foreach v,$(2),$(if $(findstring $(1),$(v)),$(v),))
+BOOT_OBJ_FILES =  $(call FILTER,printf.c.o, $(LIB_OBJ_FILES))
+BOOT_OBJ_FILES += $(call FILTER,uart.c.o, $(LIB_OBJ_FILES))
+BOOT_OBJ_FILES += $(call FILTER,util.c.o, $(LIB_OBJ_FILES))
+
 test:
 	@echo $(LIB_OBJ_FILES)
+	@echo $(BOOT_OBJ_FILES)
 
 $(BUILD_DIR)/%.o: %
 	mkdir -p $(@D)
@@ -87,6 +89,6 @@ $(LIB_IMG): $(LINK_SCRIPT) $(LIB_OBJ_FILES)
 .PHONY: boot
 boot: $(UBOOT_IMG)
 
-$(UBOOT_IMG): $(LINK_SCRIPT) $(UBOOT_OBJ_FILES) $(LIB_OBJ_FILES)
-	$(CROSS_COMPILER_PREFIX)-ld -T $(LINK_SCRIPT) -o $(BUILD_DIR)/$(UBOOT_ELF) $(UBOOT_OBJ_FILES) $(LIB_OBJ_FILES)
+$(UBOOT_IMG): $(LINK_SCRIPT) $(UBOOT_OBJ_FILES) $(BOOT_OBJ_FILES)
+	$(CROSS_COMPILER_PREFIX)-ld -T $(LINK_SCRIPT) -o $(BUILD_DIR)/$(UBOOT_ELF) $(UBOOT_OBJ_FILES) $(BOOT_OBJ_FILES)
 	$(CROSS_COMPILER_PREFIX)-objcopy $(BUILD_DIR)/$(UBOOT_ELF) -O binary $(UBOOT_IMG)

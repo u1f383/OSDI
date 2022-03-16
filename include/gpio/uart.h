@@ -14,9 +14,13 @@
 void uart_init();
 
 void uart_send(char c);
-char uart_recv();
+void uart_send_num(char *buf, int num);
+char uart_recv_one();
+void uart_recv_num(char *buf, int num);
 
 void uart_sendstr(const char *str);
 void uart_recvline(char *ptr);
+
+void uart_cmd(char *ptr);
 
 #endif /* _GPIO_UART_H_ */

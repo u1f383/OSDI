@@ -49,18 +49,37 @@ void uart_send(char c)
     set_value(aux_regs->mu_io, c, AUXMUIO_Transmit_data_write_BIT, AUXMUIO_RESERVED_BIT);
 }
 
-char uart_recv()
+void uart_send_num(char *buf, int num)
+{
+    while (num--)
+        uart_send(*buf++);
+}
+
+char uart_recv_one()
 {
     while (!get_bits(aux_regs->mu_lsr, AUXMULSR_Data_ready_BIT, AUXMULSR_Receiver_Overrun_BIT));
     return get_bits(aux_regs->mu_io, AUXMUIO_Receive_data_read_BIT, AUXMUIO_RESERVED_BIT);
 }
 
-void uart_recvline(char *ptr)
+void uart_recv_num(char *buf, int num)
 {
-    while ((*ptr = uart_recv()) != '\n' && *ptr != '\r') {
+    while (num--)
+        *buf++ = uart_recv_one();
+}
+
+void uart_cmd(char *ptr)
+{
+    while ((*ptr = uart_recv_one()) != '\n' && *ptr != '\r') {
         uart_send(*ptr);
         ptr++;
     }
+    *ptr = '\0';
+}
+
+void uart_recvline(char *ptr)
+{
+    while ((*ptr = uart_recv_one()) != '\n' && *ptr != '\r')
+        ptr++;
     *ptr = '\0';
 }
 

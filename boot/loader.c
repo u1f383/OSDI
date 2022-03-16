@@ -4,7 +4,8 @@
 #include <gpio/uart.h>
 #include <gpio/base.h>
 #include <lib/printf.h>
-#include <kernel/kernel.h>
+
+#define KERNEL_BASE_ADDR 0x80000
 
 #define PM_REG (PERIF_ADDRESS + 0x100000)
 #define PM_PASSWORD 0x5A000000
@@ -14,7 +15,7 @@
 void reset(int tick);
 void cancel_reset();
 
-char *kernel_addr;
+static char *kernel_addr =(char *) KERNEL_BASE_ADDR;
 
 /* Reboot pi after watchdog timer expire */
 void reset(int tick)
@@ -113,17 +114,52 @@ void usage()
 {
     uart_sendstr(""
         "**************** [ HELP ] ****************\r\n"
-        "help\t\t: print this help menu\r\n"
-        "reboot\t\t: reboot the device\r\n"
-        "mailbox\t\t: show board revision and arm memory information\r\n"
-        "load_kernel\t\t: transmit kernel image to 0x80000\r\n"
-        "run_kernel:\t\t: run real kernel\r\n"
+        "help     \t\t: print this help menu\r\n"
+        "reboot   \t\t: reboot the device\r\n"
+        "mailbox  \t\t: show board revision and arm memory information\r\n"
+        "load_kern\t\t: transmit kernel image to 0x80000\r\n"
+        "run_kern \t\t: run real kernel\r\n"
     );
 }
 
 void load_kernel()
 {
-    kernel_addr = (char *) KERNEL_BASE_ADDR;
+    char buf[ 1024 + sizeof(Packet) ];
+    char *_kern_addr = kernel_addr;
+    Packet *packet = (Packet *) buf;
+    uint8_t checksum;
+    
+    buf[4] = '\0';
+    uart_sendstr(MAGIC_1_STR);
+    uart_recv_num(buf, 4);
+
+    if (memcmp(buf, MAGIC_2_STR, 4)) {
+        uart_sendstr(FAILED_STR);
+        return;
+    }
+    uart_sendstr(MAGIC_3_STR);
+    
+    while (1)
+    {
+        uart_recv_num((char *) packet, 8);
+        if (packet->status == STATUS_END)
+            break;
+
+        uart_recv_num(packet->data, packet->size);
+        memcpy(_kern_addr, packet->data, packet->size);
+        _kern_addr += packet->size;
+
+        checksum = calc_checksum((unsigned char*) packet->data, packet->size);
+
+        if (checksum != packet->checksum)
+            packet->status = STATUS_BAD;
+        else
+            packet->status = STATUS_OK;
+
+        uart_send_num((char *) packet, 8);
+    }
+    packet->status = STATUS_FIN;
+    uart_send_num((char *) packet, 8);
 }
 
 __attribute__((noreturn))
@@ -149,7 +185,7 @@ void loader()
     while (1)
     {
         uart_sendstr("# ");
-        uart_recvline(cmd);
+        uart_cmd(cmd);
         uart_sendstr("\r\n");
 
         if (!strcmp(cmd, "help")) {
@@ -171,9 +207,9 @@ void loader()
             lutostr(buf, frev, 16);
             uart_sendstr(buf);
             uart_sendstr("\r\n");
-        } else if (!strcmp(cmd, "load kernel")) {
+        } else if (!strcmp(cmd, "load_kern")) {
             load_kernel();
-        } else if (!strcmp(cmd, "run kernel")) {
+        } else if (!strcmp(cmd, "run_kern")) {
             run_kernel();
         }
     }

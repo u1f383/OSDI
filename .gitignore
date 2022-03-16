@@ -5,3 +5,5 @@ nctuos.img
 build
 test.dSYM
 kernel8.img
+bootloader.img
+client
