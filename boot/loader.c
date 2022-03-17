@@ -6,16 +6,17 @@
 #include <lib/printf.h>
 
 #define KERNEL_BASE_ADDR 0x80000
-
 #define PM_REG (PERIF_ADDRESS + 0x100000)
 #define PM_PASSWORD 0x5A000000
 #define PM_RSTC ((reg32 *)(PM_REG + 0x1C))
 #define PM_RSTC_WRCFG_FULL_RESET 0x20
 #define PM_WDOG ((reg32 *)(PM_REG + 0x24))
+
 void reset(int tick);
 void cancel_reset();
 
 static char *kernel_addr =(char *) KERNEL_BASE_ADDR;
+extern uint64_t dtb_base;
 
 /* Reboot pi after watchdog timer expire */
 void reset(int tick)
@@ -124,11 +125,18 @@ void usage()
 
 void load_kernel()
 {
+    static int _kern_is_loaded = 0;
     char buf[ 1024 + sizeof(Packet) ];
     char *_kern_addr = kernel_addr;
     Packet *packet = (Packet *) buf;
     uint8_t checksum;
     
+    if (_kern_is_loaded)
+    {
+        uart_sendstr("kernel has been loaded !\r\n");
+        return;
+    }
+
     buf[4] = '\0';
     uart_sendstr(MAGIC_1_STR);
     uart_recv_num(buf, 4);
@@ -152,7 +160,10 @@ void load_kernel()
         checksum = calc_checksum((unsigned char*) packet->data, packet->size);
 
         if (checksum != packet->checksum)
+        {
             packet->status = STATUS_BAD;
+            packet->checksum = checksum;
+        }
         else
             packet->status = STATUS_OK;
 
@@ -160,12 +171,13 @@ void load_kernel()
     }
     packet->status = STATUS_FIN;
     uart_send_num((char *) packet, 8);
+    _kern_is_loaded = 1;
 }
 
 __attribute__((noreturn))
 void run_kernel()
 {
-    ( *(void(*)()) kernel_addr )();
+    ( *(void(*)(uint64_t) ) kernel_addr )(dtb_base);
     while (1);
 }
 

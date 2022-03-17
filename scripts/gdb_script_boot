@@ -1,0 +1,3 @@
+file build/bootloader.elf
+target remote 0:1234
+b *0x80000

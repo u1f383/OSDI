@@ -15,6 +15,8 @@
 #define MINOR(dev) ((uint32_t) ((dev) & MINORMASK))
 #define MKDEV(ma, mi) (((ma) << MINORBITS) | (mi))
 
+extern char *cpio_start, *cpio_end;
+
 typedef struct _Cpio_header
 {
     uint64_t c_ino; /* I-number of file */

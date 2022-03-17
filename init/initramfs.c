@@ -2,6 +2,8 @@
 #include <types.h>
 #include <lib/printf.h>
 
+char *cpio_start, *cpio_end;
+
 uint32_t new_encode_dev(dev_t dev)
 {
 	unsigned major = MAJOR(dev);

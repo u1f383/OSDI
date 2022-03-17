@@ -46,8 +46,10 @@
 
 int strcmp(const char *s1, const char *s2);
 int strcpy(char *s1, const char *s2);
+int strlen(const char *s1);
 
 /* MEMORY OPERATION */
+#define ALIGN_32(ptr) ( (((uint64_t) ptr) + 3) & ~3 )
 int memcmp(const char *dst, const char *src, uint32_t sz);
 void memcpy(char *dst, const char *src, uint32_t sz);
 void memset(char *s1, char c, uint32_t sz);
@@ -55,6 +57,19 @@ void memset(char *s1, char c, uint32_t sz);
 /* MATH OPERATION */
 uint64_t ceiling_2(uint64_t value);
 uint8_t log_2(uint64_t value);
+#define endian_xchg_32(val) ( ((val>>24)&0xff)     | \
+                              ((val>>8)&0xff00)    | \
+                              ((val<<8)&0xff0000)  | \
+                              ((val<<24)&0xff000000) )
+
+#define endian_xchg_64(val) ( ((val>>56)&0xff)               | \
+                              ((val>>40)&0xff00)             | \
+                              ((val>>24)&0xff0000)           | \
+                              ((val>>8)&0xff000000)          | \
+                              ((val<<8)&0xff00000000)        | \
+                              ((val<<24)&0xff0000000000)     | \
+                              ((val<<40)&0xff000000000000)   | \
+                              ((val<<56)&0xff00000000000000) )
 
 /* OTHER HELPER */
 void sleep(int cycles);

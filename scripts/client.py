@@ -7,13 +7,14 @@ import serial
 
 dev_path = "/dev/tty.usbserial-0001"
 kern_path = "/Users/u1f383/Documents/Homework/OSDI/kernel8.img"
+chk_sz = 1024
 
 if len(sys.argv) > 1:
     dev_path = sys.argv[1]
 if len(sys.argv) > 2:
     kern_path = sys.argv[2]
 
-r = serialtube(dev_path, baudrate=115200, timeout=10)
+r = serialtube(dev_path, baudrate=115200, timeout=10, buffer_fill_size=0)
 
 def calc_checksum(data, size):
     sum = 0
@@ -24,7 +25,9 @@ def calc_checksum(data, size):
 STATUS_FIN = 1
 STATUS_PED = 2
 STATUS_END = 3
-STATUS_OK = 4
+STATUS_OK  = 4
+STATUS_BAD = 5
+
 def pack_packet(_id, status, size, data):
     assert(len(data) == size)
     checksum = calc_checksum(data, size)
@@ -35,18 +38,17 @@ def unpack_packet(packet):
     status = u8(packet[4:5])
     checksum = u8(packet[5:6])
     size = u16(packet[6:8])
-    data = packet[8:]
-    return _id, status, checksum, size, data
+    return _id, status, checksum, size
 
 def send(r, data):
     size = len(data)
     for i in range(size):
-        r.send(bytes([ data[i] ]))
+        r.send_raw(bytes([ data[i] ]))
 
 def recv(r, size):
     data = b''
     while len(data) < size:
-        data += r.recv(1)
+        data += r.recv_raw(1)
     return data
 
 MAGIC_1 = 0x54875487
@@ -61,7 +63,7 @@ while True:
     else:
         send(r, b'load_kern\n')
         sleep(1)
-        res = r.recv(0x20)
+        res = r.recv_raw(0x20)
 
 res = res.replace(b'load_kern\r\n', b'')
 if u32(res) == MAGIC_1:
@@ -74,7 +76,7 @@ if u32(res) == MAGIC_1:
             data = kern.read()
             size = len(data)
 
-            chunks = [ data[i:i+1024] for i in range(0, size, 1024) ]
+            chunks = [ data[i:i+chk_sz] for i in range(0, size, chk_sz) ]
             _id = 0
 
             for chunk in chunks:
@@ -82,30 +84,34 @@ if u32(res) == MAGIC_1:
                 status = 0
                 
                 while status != STATUS_OK:
-                    sleep(1)
-                    print("[log] send data:", _id*1024, (_id+1)*1024)
+                    print("[log] send data:", _id*chk_sz, (_id+1)*chk_sz)
                     try:
                         send(r, packet)
+                        sleep(0.1)
                         res = recv(r, 8)
-                        _, status, _, _, _ = unpack_packet(res)
+                        _, status, checksum, size = unpack_packet(res)
+
+                        if status == STATUS_BAD:
+                            print("RECV:", checksum, size)
+                            print("SEND:", calc_checksum(chunk, len(chunk)), len(chunk))
+                            break
                     except:
                         print("[log] wrong")
                         r.close()
                         exit(1)
+                
+                _id += 1
             print("[log] send data end")
     
         packet = pack_packet(0, STATUS_END, 0, b"")
         send(r, packet)
 
         res = recv(r, 8)
-        _, status, _, _, _ = unpack_packet(res)
+        _, status, _, _ = unpack_packet(res)
 
         if status == STATUS_FIN:
             print("[log] finish connection successfully")
         else:
             print("[log] finish connection accidently")
 
-
-input("Press enter to run kernel")
-send(r, b'run_kern\n')
 r.close()

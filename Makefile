@@ -25,26 +25,49 @@ KERN_IMG = kernel8.img # The 8 of kernel8 means ARMv8
 KERN_ELF = kernel8.elf
 KERN_LINK_SCRIPT = $(SCRIPT_DIR)/linker_kern.ld
 
+# stdio / pty
+INTERFACE = stdio
 
 all: $(KERN_IMG) $(UBOOT_IMG)
 
 .PHONY: debug
-debug:
+debug_kern:
 	qemu-system-aarch64 -M raspi3b \
 						-kernel $(KERN_IMG) \
 						-serial null \
-						-serial stdio \
+						-serial $(INTERFACE) \
 						-initrd initramfs.cpio \
+						-dtb bcm2710-rpi-3-b-plus.dtb \
+						-display none \
+						-S -s
+
+debug_boot:
+	qemu-system-aarch64 -M raspi3b \
+						-kernel $(UBOOT_IMG) \
+						-serial null \
+						-serial $(INTERFACE) \
+						-initrd initramfs.cpio \
+						-dtb bcm2710-rpi-3-b-plus.dtb \
 						-display none \
 						-S -s
 
 .PHONY: run
-run:
+run_kern:
 	qemu-system-aarch64 -M raspi3b \
 						-kernel $(KERN_IMG) \
 						-serial null \
-						-serial stdio \
+						-serial $(INTERFACE) \
 						-initrd initramfs.cpio \
+						-dtb bcm2710-rpi-3-b-plus.dtb \
+						-display none
+
+run_boot:
+	qemu-system-aarch64 -M raspi3b \
+						-kernel $(UBOOT_IMG) \
+						-serial null \
+						-serial $(INTERFACE) \
+						-initrd initramfs.cpio \
+						-dtb bcm2710-rpi-3-b-plus.dtb \
 						-display none
 
 ROOTFS = rootfs

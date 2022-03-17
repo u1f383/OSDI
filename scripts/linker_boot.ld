@@ -9,8 +9,8 @@ SECTIONS
     *(.text)
     *(.text.*)
   }
-  
-  . = ALIGN(0x1000);
+
+  . = 0x90000;
   .bss :
   {
     __bss_start = .;
@@ -37,6 +37,6 @@ SECTIONS
     *(.comment)
     *(.eh_frame)
   }
-  
+
   _end = .;
 }

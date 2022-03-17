@@ -174,7 +174,7 @@ int sprintf(char *buf, const char *fmt, ...)
 
 int printf(const char *fmt, ...)
 {
-    char buf[0x100];
+    char buf[0x100] = {0};
     int count = 0;
     va_list args;
 

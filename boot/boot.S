@@ -3,6 +3,9 @@
 .global _start
 
 _start:
+    ldr x1, =dtb_base
+    str x0, [x1]
+
     # In the beginning, we need to move
     # our kernel to other space
 
@@ -53,3 +56,9 @@ slave:
     # Wait for interrupt event
     wfe
     b slave
+
+.section ".data"
+
+.global dtb_base
+dtb_base:
+    .long 0
