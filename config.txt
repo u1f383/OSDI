@@ -1,5 +1,7 @@
-# Alt kernel image on the boot partition
+p# Alt kernel image on the boot partition
 kernel=bootloader.img
 
 # Forces the kernel loading system to assume a 64-bit kernel
 arm_64bit=1
+
+initramfs initramfs.cpio 0x20000000
