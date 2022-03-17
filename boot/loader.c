@@ -149,7 +149,7 @@ void load_kernel()
     
     while (1)
     {
-        uart_recv_num((char *) packet, 8);
+        uart_recv_num((char *) packet, sizeof(Packet));
         if (packet->status == STATUS_END)
             break;
 
@@ -167,10 +167,10 @@ void load_kernel()
         else
             packet->status = STATUS_OK;
 
-        uart_send_num((char *) packet, 8);
+        uart_send_num((char *) packet, sizeof(Packet));
     }
     packet->status = STATUS_FIN;
-    uart_send_num((char *) packet, 8);
+    uart_send_num((char *) packet, sizeof(Packet));
     _kern_is_loaded = 1;
 }
 

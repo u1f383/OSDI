@@ -112,7 +112,7 @@ void cpio_ls(char *archive)
         memcpy(data_buf, fcontent, fcnt_sz);
         data_buf[ fcnt_sz ] = '\0';
 
-        printf("[ %s ] : %s\n", name_buf, data_buf);
+        printf("[ %s ] : %s\r\n", name_buf, data_buf);
         next_hdr = fcontent + ramfs_header.c_filesize;
         next_hdr = (char *) (((uint64_t) next_hdr + 3) & ~3);
     }

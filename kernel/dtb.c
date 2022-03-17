@@ -6,20 +6,20 @@
 
 void show_hdr(Fdt_header *fdt_hdr)
 {
-    printf("sizeof(Fdt_header): 0x%lxd\n", sizeof(Fdt_header));
-    printf("magic: 0x%x\n", fdt_hdr->magic);
-    printf("totalsize: 0x%x\n", fdt_hdr->totalsize);
-    printf("off_dt_struct: 0x%x\n", fdt_hdr->off_dt_struct);
-    printf("off_dt_strings: 0x%x\n", fdt_hdr->off_dt_strings);
-    printf("off_mem_rsvmap: 0x%x\n", fdt_hdr->off_mem_rsvmap);
-    printf("version: 0x%x\n", fdt_hdr->version);
-    printf("last_comp_version: 0x%x\n", fdt_hdr->last_comp_version);
-    printf("boot_cpuid_phys: 0x%x\n", fdt_hdr->boot_cpuid_phys);
-    printf("size_dt_strings: 0x%x\n", fdt_hdr->size_dt_strings);
-    printf("size_dt_struct: 0x%x\n\n", fdt_hdr->size_dt_struct);
+    printf("sizeof(Fdt_header): 0x%lxd\r\n", sizeof(Fdt_header));
+    printf("magic: 0x%x\r\n", fdt_hdr->magic);
+    printf("totalsize: 0x%x\r\n", fdt_hdr->totalsize);
+    printf("off_dt_struct: 0x%x\r\n", fdt_hdr->off_dt_struct);
+    printf("off_dt_strings: 0x%x\r\n", fdt_hdr->off_dt_strings);
+    printf("off_mem_rsvmap: 0x%x\r\n", fdt_hdr->off_mem_rsvmap);
+    printf("version: 0x%x\r\n", fdt_hdr->version);
+    printf("last_comp_version: 0x%x\r\n", fdt_hdr->last_comp_version);
+    printf("boot_cpuid_phys: 0x%x\r\n", fdt_hdr->boot_cpuid_phys);
+    printf("size_dt_strings: 0x%x\r\n", fdt_hdr->size_dt_strings);
+    printf("size_dt_struct: 0x%x\r\n\n", fdt_hdr->size_dt_struct);
 }
 
-void parse_dtb(char *dtb)
+void parse_dtb(char *dtb, void(*callback)())
 {
     Fdt_header *fdt_hdr = (Fdt_header *) dtb;
     
@@ -44,7 +44,7 @@ void parse_dtb(char *dtb)
     {
         fdt_rsv->address = endian_xchg_64(fdt_rsv->address);
         fdt_rsv->size = endian_xchg_64(fdt_rsv->size);
-        printf("%p: addr: 0x%lx, size: 0x%lx\n", fdt_rsv, fdt_rsv->address, fdt_rsv->size);
+        printf("%p: addr: 0x%lx, size: 0x%lx\r\n", fdt_rsv, fdt_rsv->address, fdt_rsv->size);
         fdt_rsv++;
     }
 
@@ -88,14 +88,15 @@ void parse_dtb(char *dtb)
             if (!strcmp(prop_name, "linux,initrd-start"))
             {
                 prop_val_32 = (*(uint32_t *) fdt_struct);
-                cpio_start = (char *) endian_xchg_32(prop_val_32);
-                printf("(%s) cpio_start: 0x%lx\n", prop_name, cpio_start);
+                cpio_start = (char *) ((uint64_t) endian_xchg_32(prop_val_32));
+
+                if (callback != NULL)
+                    callback();
             }
             if (!strcmp(prop_name, "linux,initrd-end"))
             {
                 prop_val_32 = (*(uint32_t *) fdt_struct);
-                cpio_end = (char *) endian_xchg_32(prop_val_32);
-                printf("(%s) cpio_end: 0x%lx\n", prop_name, cpio_end);
+                cpio_end = (char *) ((uint64_t) endian_xchg_32(prop_val_32));
             }
             
             fdt_struct += fdt_node->len;
@@ -115,6 +116,6 @@ void parse_dtb(char *dtb)
         }
     }
 _ret_parse_dtb:
-    printf("OK\n");
+    printf("OK\r\n");
 }
 

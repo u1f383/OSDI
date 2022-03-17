@@ -3,7 +3,6 @@
 from pwn import *
 import os
 import sys
-import serial
 
 dev_path = "/dev/tty.usbserial-0001"
 kern_path = "/Users/u1f383/Documents/Homework/OSDI/kernel8.img"
@@ -14,7 +13,7 @@ if len(sys.argv) > 1:
 if len(sys.argv) > 2:
     kern_path = sys.argv[2]
 
-r = serialtube(dev_path, baudrate=115200, timeout=10, buffer_fill_size=0)
+r = serialtube(dev_path, baudrate=115200, timeout=10, buffer_fill_size=0, convert_newlines=False)
 
 def calc_checksum(data, size):
     sum = 0
@@ -44,6 +43,7 @@ def send(r, data):
     size = len(data)
     for i in range(size):
         r.send_raw(bytes([ data[i] ]))
+        
 
 def recv(r, size):
     data = b''
@@ -89,7 +89,7 @@ if u32(res) == MAGIC_1:
                         send(r, packet)
                         sleep(0.1)
                         res = recv(r, 8)
-                        _, status, checksum, size = unpack_packet(res)
+                        __id, status, checksum, size = unpack_packet(res)
 
                         if status == STATUS_BAD:
                             print("RECV:", checksum, size)
@@ -113,5 +113,5 @@ if u32(res) == MAGIC_1:
             print("[log] finish connection successfully")
         else:
             print("[log] finish connection accidently")
-
+            
 r.close()
