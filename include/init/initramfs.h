@@ -32,7 +32,7 @@ typedef struct _Cpio_header
     uint64_t c_namesize; /* Length of filename */
 } Cpio_header;
 
-int cpio_find_file(char *archive, const char *fname);
-void cpio_ls(char *archive);
+char *cpio_find_file(const char *fname);
+void cpio_ls();
 
 #endif /* _INIT_INITRAMFS_H_ */

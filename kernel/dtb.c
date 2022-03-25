@@ -19,7 +19,7 @@ void show_hdr(Fdt_header *fdt_hdr)
     printf("size_dt_struct: 0x%x\r\n\n", fdt_hdr->size_dt_struct);
 }
 
-void parse_dtb(char *dtb, void(*callback)())
+void parse_dtb(char *dtb, void(*callback)(int,char*,char*,int))
 {
     Fdt_header *fdt_hdr = (Fdt_header *) dtb;
     
@@ -50,14 +50,15 @@ void parse_dtb(char *dtb, void(*callback)())
 
     char *node_name;
     char *prop_name;
-    int node_type;
+    char *prop_value;
+
+    int node_type, prop_len;
     Fdt_node *fdt_node;
 
     char *prop_name_base = dtb + fdt_hdr->off_dt_strings;
     char *fdt_struct = (char *) fdt_rsv;
 
     int level = 0;
-    uint32_t prop_val_32;
     char spaces[0x100];
     
     memset(spaces, ' ', 0xff);
@@ -68,6 +69,10 @@ void parse_dtb(char *dtb, void(*callback)())
         node_type = *(uint32_t *) fdt_struct;
         node_type = endian_xchg_32(node_type);
         fdt_struct += 4;
+
+        prop_value = NULL;
+        prop_name = NULL;
+        prop_len = 0;
         
         switch (node_type)
         {
@@ -78,26 +83,16 @@ void parse_dtb(char *dtb, void(*callback)())
             fdt_struct += strlen(node_name) + 1;
             fdt_struct = (char *) ALIGN_32(fdt_struct);
             break;
+
         case FDT_PROP:
             fdt_node = (Fdt_node *) fdt_struct;
             fdt_node->len = endian_xchg_32(fdt_node->len);
             fdt_node->nameoff = endian_xchg_32(fdt_node->nameoff);
             fdt_struct += sizeof(Fdt_node);
-
+            
+            prop_value = fdt_struct;
             prop_name = prop_name_base + fdt_node->nameoff;
-            if (!strcmp(prop_name, "linux,initrd-start"))
-            {
-                prop_val_32 = (*(uint32_t *) fdt_struct);
-                cpio_start = (char *) ((uint64_t) endian_xchg_32(prop_val_32));
-
-                if (callback != NULL)
-                    callback();
-            }
-            if (!strcmp(prop_name, "linux,initrd-end"))
-            {
-                prop_val_32 = (*(uint32_t *) fdt_struct);
-                cpio_end = (char *) ((uint64_t) endian_xchg_32(prop_val_32));
-            }
+            prop_len = fdt_node->len;
             
             fdt_struct += fdt_node->len;
             fdt_struct = (char *) ALIGN_32(fdt_struct);
@@ -109,13 +104,16 @@ void parse_dtb(char *dtb, void(*callback)())
         case FDT_NOP:
             break;
         case FDT_END:
-            goto _ret_parse_dtb;
+            goto parse_dtb_ret;
             break;
         default:
             break;
         }
+
+        if (prop_name && prop_value)
+            callback(node_type, prop_name, prop_value, prop_len);
     }
-_ret_parse_dtb:
-    printf("OK\r\n");
+parse_dtb_ret:
+    return;
 }
 

@@ -1,14 +1,12 @@
 SECTIONS
 { 
-  . = 0x60000;
-  _boot_base = .;
+  . = 0x0;
   .text :
   {
-    KEEP(*(.text.boot))
     *(.text)
     *(.text.*)
   }
-
+  
   . = ALIGN(0x1000);
   .bss :
   {
@@ -19,7 +17,6 @@ SECTIONS
     __bss_end = .;
   }
 
-  . = ALIGN(0x1000);
   .data :
   {
     *(.data)
@@ -36,6 +33,5 @@ SECTIONS
     *(.comment)
     *(.eh_frame)
   }
-
   _end = .;
 }

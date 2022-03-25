@@ -54,7 +54,7 @@ memzero:
 
 slave:
     # Wait for interrupt event
-    wfe
+    # wfe
     b slave
 
 .section ".data"

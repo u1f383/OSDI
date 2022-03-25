@@ -30,14 +30,13 @@ SECTIONS
     *(.rodata)
   }
 
-  . = ALIGN(0x1000);
-  _stack = .;
-
   /DISCARD/ :
   {
     *(.comment)
     *(.eh_frame)
   }
   
+  . = 0x100000;
+  _stack = .;
   _end = .;
 }

@@ -67,7 +67,6 @@ typedef struct _Page {
     {
         struct _Page *free_pg;
     } private;
-    
 } Page;
 
 /**

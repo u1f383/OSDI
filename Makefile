@@ -5,6 +5,8 @@ CROSS_COMPILER_PREFIX ?= aarch64-unknown-linux-gnu
 #                      preventing the compiler from using fp and Advanced SIMD registers
 #                      but will not impose any restrictions on the assembler
 CFLAGS = -Wall \
+		-mcpu=cortex-a53 \
+		-march=armv8-a \
 		-nostdlib \
 		-nostartfiles \
 		-ffreestanding \
@@ -33,6 +35,7 @@ all: $(KERN_IMG) $(UBOOT_IMG)
 .PHONY: debug
 debug_kern:
 	qemu-system-aarch64 -M raspi3b \
+						-cpu cortex-a53 \
 						-kernel $(KERN_IMG) \
 						-serial null \
 						-serial $(INTERFACE) \
@@ -43,6 +46,7 @@ debug_kern:
 
 debug_boot:
 	qemu-system-aarch64 -M raspi3b \
+						-cpu cortex-a53 \
 						-kernel $(UBOOT_IMG) \
 						-serial null \
 						-serial $(INTERFACE) \
@@ -54,6 +58,7 @@ debug_boot:
 .PHONY: run
 run_kern:
 	qemu-system-aarch64 -M raspi3b \
+						-cpu cortex-a53 \
 						-kernel $(KERN_IMG) \
 						-serial null \
 						-serial $(INTERFACE) \
@@ -63,6 +68,7 @@ run_kern:
 
 run_boot:
 	qemu-system-aarch64 -M raspi3b \
+						-cpu cortex-a53 \
 						-kernel $(UBOOT_IMG) \
 						-serial null \
 						-serial $(INTERFACE) \
@@ -73,9 +79,8 @@ run_boot:
 ROOTFS = rootfs
 .PHONY: new_cpio
 new_cpio:
-	echo "AAAA" > $(ROOTFS)/A.txt
-	echo "BBBB" > $(ROOTFS)/B.txt
-	echo "CCCC" > $(ROOTFS)/C.txt
+	make -C $(SCRIPT_DIR) user_program
+	cp $(SCRIPT_DIR)/user_program $(ROOTFS)
 	find $(ROOTFS)/ | cpio -o -H newc > initramfs.cpio
 
 .PHONY: clean

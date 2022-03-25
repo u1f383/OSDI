@@ -2,7 +2,13 @@
 #include <gpio/gpio.h>
 #include <util.h>
 
+#define UART_BUF_SIZE 0x100
+
 AuxRegs *aux_regs;
+char uart_rbuf[ UART_BUF_SIZE ];
+char uart_wbuf[ UART_BUF_SIZE ];
+int32_t uart_rbuf_idx = 0;
+int32_t uart_wbuf_idx = 0;
 
 void uart_init()
 {
@@ -43,6 +49,35 @@ void uart_init()
     set_value(*GPIO_GPPUDCLK0_REG, GPIO_GPPUDCLK_NO_EFFECT, 0, sizeof(reg32));
 }
 
+void uart_eint()
+{
+    /* Enable IRQs1 - Aux int */
+    uint32_t *int_reg_irqs1 = (uint32_t *) ARM_INT_IRQs1_REG;
+    *int_reg_irqs1 |= (1 << 29);
+    
+    /* Enable tran/recv interrupt */
+    set_value(aux_regs->mu_ier, 0b11, AUXMUIER_Enable_receive_interrupts_BIT,
+                                        AUXMUIER_RESERVED_BIT);
+}
+
+void uart_int_handler()
+{
+    /* Transmit holding register empty */
+    if ((aux_regs->mu_iir & 0b010) && uart_wbuf_idx > 0)
+    {
+        set_value(aux_regs->mu_io, uart_wbuf[--uart_wbuf_idx], AUXMUIO_Transmit_data_write_BIT, AUXMUIO_RESERVED_BIT);
+    }
+    /* Receiver holds valid byte */
+    else if ((aux_regs->mu_iir & 0b100) && uart_rbuf_idx < UART_BUF_SIZE)
+    {
+        uart_rbuf[uart_rbuf_idx++] = get_bits(aux_regs->mu_io, AUXMUIO_Receive_data_read_BIT, AUXMUIO_RESERVED_BIT);
+        
+        if (uart_wbuf_idx < UART_BUF_SIZE)
+            uart_wbuf[uart_wbuf_idx++] = uart_rbuf[uart_rbuf_idx - 1];
+    }
+    set_value(aux_regs->mu_iir, 0, AUXMUIIR_FIFO_clear_bits_BIT, AUXMUIIR_ALWAYS_ZERO_BIT);
+}
+
 void uart_send(char c)
 {
     while (!get_bits(aux_regs->mu_lsr, AUXMULSR_Transmitter_empty_BIT, AUXMULSR_Transmitter_idle_BIT));
@@ -55,7 +90,7 @@ void uart_send_num(char *buf, int num)
         uart_send(*buf++);
 }
 
-char uart_recv_one()
+char uart_recv()
 {
     while (!get_bits(aux_regs->mu_lsr, AUXMULSR_Data_ready_BIT, AUXMULSR_Receiver_Overrun_BIT));
     return get_bits(aux_regs->mu_io, AUXMUIO_Receive_data_read_BIT, AUXMUIO_RESERVED_BIT);
@@ -64,12 +99,12 @@ char uart_recv_one()
 void uart_recv_num(char *buf, int num)
 {
     while (num--)
-        *buf++ = uart_recv_one();
+        *buf++ = uart_recv();
 }
 
 void uart_cmd(char *ptr)
 {
-    while ((*ptr = uart_recv_one()) != '\n' && *ptr != '\r') {
+    while ((*ptr = uart_recv()) != '\n' && *ptr != '\r') {
         uart_send(*ptr);
         ptr++;
     }
@@ -78,7 +113,7 @@ void uart_cmd(char *ptr)
 
 void uart_recvline(char *ptr)
 {
-    while ((*ptr = uart_recv_one()) != '\n' && *ptr != '\r')
+    while ((*ptr = uart_recv()) != '\n' && *ptr != '\r')
         ptr++;
     *ptr = '\0';
 }
@@ -87,4 +122,46 @@ void uart_sendstr(const char *str)
 {
     while (*str)
         uart_send(*str++);
+}
+
+/**
+ * =====================================
+ *             async handle
+ * =====================================
+ */
+
+#define uart_send_critial(_orig_ier, _code)           \
+    set_value(aux_regs->mu_ier, _orig_ier & 0b01,     \
+              AUXMUIER_Enable_receive_interrupts_BIT, \
+              AUXMUIER_RESERVED_BIT);                 \
+    _code                                             \
+    set_value(aux_regs->mu_ier, _orig_ier,            \
+            AUXMUIER_Enable_receive_interrupts_BIT,   \ 
+            AUXMUIER_RESERVED_BIT);
+
+#define uart_recv_critial(_orig_ier, _code)           \
+    set_value(aux_regs->mu_ier, _orig_ier & 0b10,     \
+              AUXMUIER_Enable_receive_interrupts_BIT, \
+              AUXMUIER_RESERVED_BIT);                 \
+    _code                                             \
+    set_value(aux_regs->mu_ier, _orig_ier,            \
+            AUXMUIER_Enable_receive_interrupts_BIT,   \ 
+            AUXMUIER_RESERVED_BIT);
+
+void async_uart_sendchr(char c)
+{
+    uint8_t orig_ier = aux_regs->mu_ier & 0b11;
+    uart_send_critial(orig_ier, {
+        if (uart_wbuf_idx < UART_BUF_SIZE)
+            uart_wbuf[ uart_wbuf_idx++ ] = c;
+    });
+}
+
+void async_uart_sendstr(const char *str)
+{
+    uint8_t orig_ier = aux_regs->mu_ier & 0b11;
+    uart_send_critial(orig_ier, {
+        while (uart_wbuf_idx < UART_BUF_SIZE && *str)
+            uart_wbuf[ uart_wbuf_idx++ ] = *str++;
+    });
 }

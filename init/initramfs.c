@@ -13,10 +13,13 @@ uint32_t new_encode_dev(dev_t dev)
 
 /* name of file in cpio is 4-byte alignment */
 #define N_ALIGN(len) ((((len) + 1) & ~3) + 2)
-int cpio_find_file(char *archive, const char *target)
+char *cpio_find_file(const char *target)
 {
-    if (!memcmp(archive, CPIO_HEADER_MAGIC, 6))
-        return -1;
+    if (cpio_start == NULL)
+        return NULL;
+
+    if (!memcmp(cpio_start, CPIO_HEADER_MAGIC, 6))
+        return NULL;
 
     Cpio_header ramfs_header;
     char *fname, *fcontent;
@@ -25,7 +28,9 @@ int cpio_find_file(char *archive, const char *target)
 	int i;
 
     char *hdr;
-    char *next_hdr = archive;
+    char *next_hdr = cpio_start;
+    char name_buf[0x20];
+
     while (1)
     {
         hdr = next_hdr;
@@ -46,26 +51,33 @@ int cpio_find_file(char *archive, const char *target)
         ramfs_header.c_devminor = parsed[8];
         ramfs_header.c_rdev = new_encode_dev(MKDEV(parsed[9], parsed[10]));
         ramfs_header.c_namesize = parsed[11];
+        
+        int fname_sz = ramfs_header.c_namesize >= 0x1f ? 0x1f : ramfs_header.c_namesize;
 
-        fname = hdr + sizeof(Cpio_header);
+        fname = hdr + 8;
         if (!strcmp(fname, CPIO_FOOTER_MAGIC))
             break;
 
-        fcontent = hdr + N_ALIGN(ramfs_header.c_namesize);        
-        if (!strcmp(fname, target))
-        {
-            printf("%s", fcontent);
-            return 0;
-        }
+        memcpy(name_buf, fname, fname_sz);
+        name_buf[ fname_sz ] = '\0';
+        fcontent = fname + N_ALIGN(ramfs_header.c_namesize);
+
+        if (!strcmp(name_buf, target))
+            return fcontent;
+
         next_hdr = fcontent + ramfs_header.c_filesize;
+        next_hdr = (char *) (((uint64_t) next_hdr + 3) & ~3);
     }
-    
-    return -1;
+
+    return NULL;
 }
 
-void cpio_ls(char *archive)
+void cpio_ls()
 {
-    if (!memcmp(archive, CPIO_HEADER_MAGIC, 6))
+    if (cpio_start == NULL)
+        return;
+
+    if (!memcmp(cpio_start, CPIO_HEADER_MAGIC, 6))
         return;
 
     Cpio_header ramfs_header;
@@ -75,8 +87,9 @@ void cpio_ls(char *archive)
 	int i;
 
     char *hdr;
-    char *next_hdr = archive;
-    char name_buf[0x10], data_buf[0x100];
+    char *next_hdr = cpio_start;
+    char name_buf[0x20];
+
     while (1)
     {
         hdr = next_hdr;
@@ -98,8 +111,7 @@ void cpio_ls(char *archive)
         ramfs_header.c_rdev = new_encode_dev(MKDEV(parsed[9], parsed[10]));
         ramfs_header.c_namesize = parsed[11];
         
-        int fname_sz = ramfs_header.c_namesize >= 0xf ? 0xf : ramfs_header.c_namesize;
-        int fcnt_sz = ramfs_header.c_filesize >= 0xff ? 0xff : ramfs_header.c_filesize;
+        int fname_sz = ramfs_header.c_namesize >= 0x1f ? 0x1f : ramfs_header.c_namesize;
 
         fname = hdr + 8;
         if (!strcmp(fname, CPIO_FOOTER_MAGIC))
@@ -107,12 +119,10 @@ void cpio_ls(char *archive)
 
         memcpy(name_buf, fname, fname_sz);
         name_buf[ fname_sz ] = '\0';
-        
         fcontent = fname + N_ALIGN(ramfs_header.c_namesize);        
-        memcpy(data_buf, fcontent, fcnt_sz);
-        data_buf[ fcnt_sz ] = '\0';
 
-        printf("[ %s ] : %s\r\n", name_buf, data_buf);
+        printf("%s\r\n", name_buf);
+
         next_hdr = fcontent + ramfs_header.c_filesize;
         next_hdr = (char *) (((uint64_t) next_hdr + 3) & ~3);
     }

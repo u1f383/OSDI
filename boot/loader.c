@@ -177,7 +177,7 @@ void load_kernel()
 __attribute__((noreturn))
 void run_kernel()
 {
-    ( *(void(*)(uint64_t) ) kernel_addr )(dtb_base);
+    ( *(void(*)(uint64_t)) kernel_addr )(dtb_base);
     while (1);
 }
 

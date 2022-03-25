@@ -71,6 +71,15 @@ uint8_t log_2(uint64_t value);
                               ((val<<40)&0xff000000000000)   | \
                               ((val<<56)&0xff00000000000000) )
 
+/* REGISTER OPERATION */
+#define read_sysreg(reg) ({          \
+    uint64_t _val;                   \
+    __asm__ volatile("mrs x0, " #reg \
+                     : "=r"(_val));  \
+                    _val; })
+
+#define write_sysreg(reg, _val) ({ __asm__ volatile("msr " #reg ", %0" ::"rZ"(_val)); })
+
 /* OTHER HELPER */
 void sleep(int cycles);
 
