@@ -1,6 +1,7 @@
 #include <init/initramfs.h>
 #include <kernel/kernel.h>
 #include <kernel/dtb.h>
+#include <kernel/irq.h>
 #include <lib/printf.h>
 #include <gpio/uart.h>
 #include <arm/mm.h>
@@ -50,33 +51,31 @@ void kernel()
 
     /* Timer init */
     printf("boot_time: %x\r\n", boot_time);
-    // timer_init(2);
+
+    add_timer(uart_sendstr, "1\r\n", 1);
+    add_timer(uart_sendstr, "2\r\n", 2);
+    add_timer(uart_sendstr, "5\r\n", 5);
 
     /* Enable UART interrupt */
     uart_eint();
-    async_uart_sendstr("hello world !");
 
     char cmd[0x20];
     while (1)
     {
-        // async_uart_sendstr("# ");
-        // uart_cmd(cmd);
-        // uart_sendstr("\r\n");
+        async_uart_sendstr("# ");
+        async_uart_cmd(cmd);
+        async_uart_sendstr("\r\n");
 
-        // if (!strcmp(cmd, "help")) {
-        //     usage();
-        // } else if (!strcmp(cmd, "ls")) {
-        //     cpio_ls();
-        // } else if (!strcmp(cmd, "run_user")) {
-        //     // uart_sendstr("filename: ");
-        //     // uart_cmd(cmd);
-        //     // uart_sendstr("\r\n");
-
-        //     char *program = cpio_find_file("rootfs//user_program");
-        //     if (program == NULL)
-        //         printf("File not found.\r\n");
-        //     else
-        //         from_el1_to_el0((uint64_t) program);
-        // }
+        if (!strcmp(cmd, "help")) {
+            usage();
+        } else if (!strcmp(cmd, "ls")) {
+            cpio_ls();
+        } else if (!strcmp(cmd, "run_user")) {
+            char *program = cpio_find_file("rootfs//user_program");
+            if (program == NULL)
+                printf("File not found.\r\n");
+            else
+                from_el1_to_el0((uint64_t) program);
+        }
     }
 }

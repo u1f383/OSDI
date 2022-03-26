@@ -7,8 +7,33 @@
 AuxRegs *aux_regs;
 char uart_rbuf[ UART_BUF_SIZE ];
 char uart_wbuf[ UART_BUF_SIZE ];
-int32_t uart_rbuf_idx = 0;
-int32_t uart_wbuf_idx = 0;
+int32_t uart_rbuf_top = 0;
+int32_t uart_rbuf_cur = 0;
+int32_t uart_wbuf_top = 0;
+int32_t uart_wbuf_cur = 0;
+
+
+static inline int is_wbuf_empty()
+{
+    return uart_wbuf_top == uart_wbuf_cur;
+}
+
+static inline int is_wbuf_fill()
+{
+    return uart_wbuf_top == uart_wbuf_cur-1 ||
+           uart_wbuf_top == uart_wbuf_cur - UART_BUF_SIZE + 1;
+}
+
+static inline int is_rbuf_empty()
+{
+    return uart_rbuf_top == uart_rbuf_cur;
+}
+
+static inline int is_rbuf_fill()
+{
+    return uart_rbuf_top == uart_rbuf_cur-1 ||
+           uart_rbuf_top == uart_rbuf_cur - UART_BUF_SIZE + 1;
+}
 
 void uart_init()
 {
@@ -55,26 +80,37 @@ void uart_eint()
     uint32_t *int_reg_irqs1 = (uint32_t *) ARM_INT_IRQs1_REG;
     *int_reg_irqs1 |= (1 << 29);
     
-    /* Enable tran/recv interrupt */
-    set_value(aux_regs->mu_ier, 0b11, AUXMUIER_Enable_receive_interrupts_BIT,
-                                        AUXMUIER_RESERVED_BIT);
+    /* Enable recv interrupt */
+    set_value(aux_regs->mu_ier, 1, AUXMUIER_Enable_receive_interrupts_BIT,
+                                    AUXMUIER_Enable_transmit_interrupts_BIT);
 }
 
-void uart_int_handler()
+void uart_intr_handler()
 {
+    reg32 orig_iir = aux_regs->mu_iir;
+    reg32 orig_ier = aux_regs->mu_ier;
+    set_value(aux_regs->mu_ier, 0, AUXMUIER_Enable_receive_interrupts_BIT, AUXMUIER_RESERVED_BIT);
+    __asm__ volatile ("msr DAIFClr, 0xf");
+
     /* Transmit holding register empty */
-    if ((aux_regs->mu_iir & 0b010) && uart_wbuf_idx > 0)
+    if (orig_iir & 0b010)
     {
-        set_value(aux_regs->mu_io, uart_wbuf[--uart_wbuf_idx], AUXMUIO_Transmit_data_write_BIT, AUXMUIO_RESERVED_BIT);
+        if (!is_wbuf_empty())
+        {
+            set_value(aux_regs->mu_io, uart_wbuf[ uart_wbuf_cur ], AUXMUIO_Transmit_data_write_BIT, AUXMUIO_RESERVED_BIT);
+            uart_wbuf_cur = (uart_wbuf_cur+1) % UART_BUF_SIZE;
+        }
+        else
+            orig_ier &= ~(0b10);
     }
     /* Receiver holds valid byte */
-    else if ((aux_regs->mu_iir & 0b100) && uart_rbuf_idx < UART_BUF_SIZE)
+    else if ((orig_iir & 0b100) && !is_rbuf_fill())
     {
-        uart_rbuf[uart_rbuf_idx++] = get_bits(aux_regs->mu_io, AUXMUIO_Receive_data_read_BIT, AUXMUIO_RESERVED_BIT);
-        
-        if (uart_wbuf_idx < UART_BUF_SIZE)
-            uart_wbuf[uart_wbuf_idx++] = uart_rbuf[uart_rbuf_idx - 1];
+        uart_rbuf[ uart_rbuf_top ] = get_bits(aux_regs->mu_io, AUXMUIO_Receive_data_read_BIT, AUXMUIO_RESERVED_BIT);
+        uart_rbuf_top = (uart_rbuf_top+1) % UART_BUF_SIZE;
     }
+
+    set_value(aux_regs->mu_ier, orig_ier, AUXMUIER_Enable_receive_interrupts_BIT, AUXMUIER_RESERVED_BIT);
     set_value(aux_regs->mu_iir, 0, AUXMUIIR_FIFO_clear_bits_BIT, AUXMUIIR_ALWAYS_ZERO_BIT);
 }
 
@@ -130,38 +166,47 @@ void uart_sendstr(const char *str)
  * =====================================
  */
 
-#define uart_send_critial(_orig_ier, _code)           \
-    set_value(aux_regs->mu_ier, _orig_ier & 0b01,     \
-              AUXMUIER_Enable_receive_interrupts_BIT, \
-              AUXMUIER_RESERVED_BIT);                 \
-    _code                                             \
-    set_value(aux_regs->mu_ier, _orig_ier,            \
-            AUXMUIER_Enable_receive_interrupts_BIT,   \ 
-            AUXMUIER_RESERVED_BIT);
-
-#define uart_recv_critial(_orig_ier, _code)           \
-    set_value(aux_regs->mu_ier, _orig_ier & 0b10,     \
-              AUXMUIER_Enable_receive_interrupts_BIT, \
-              AUXMUIER_RESERVED_BIT);                 \
-    _code                                             \
-    set_value(aux_regs->mu_ier, _orig_ier,            \
-            AUXMUIER_Enable_receive_interrupts_BIT,   \ 
-            AUXMUIER_RESERVED_BIT);
-
 void async_uart_sendchr(char c)
 {
-    uint8_t orig_ier = aux_regs->mu_ier & 0b11;
-    uart_send_critial(orig_ier, {
-        if (uart_wbuf_idx < UART_BUF_SIZE)
-            uart_wbuf[ uart_wbuf_idx++ ] = c;
-    });
+    if (!is_wbuf_fill())
+    {
+        uart_wbuf[ uart_wbuf_top ] = c;
+        uart_wbuf_top = (uart_wbuf_top+1) % UART_BUF_SIZE;
+        set_value(aux_regs->mu_ier, aux_regs->mu_ier | 0b10,
+                AUXMUIER_Enable_receive_interrupts_BIT, AUXMUIER_RESERVED_BIT);
+    }
 }
 
 void async_uart_sendstr(const char *str)
 {
-    uint8_t orig_ier = aux_regs->mu_ier & 0b11;
-    uart_send_critial(orig_ier, {
-        while (uart_wbuf_idx < UART_BUF_SIZE && *str)
-            uart_wbuf[ uart_wbuf_idx++ ] = *str++;
-    });
+    if (*str == '\0' || is_wbuf_fill())
+        return;
+
+    while (!is_wbuf_fill() && *str)
+    {
+        uart_wbuf[ uart_wbuf_top ] = *str++;
+        uart_wbuf_top = (uart_wbuf_top+1) % UART_BUF_SIZE;
+    }
+
+    set_value(aux_regs->mu_ier, aux_regs->mu_ier | 0b10,
+                AUXMUIER_Enable_receive_interrupts_BIT, AUXMUIER_RESERVED_BIT);
+}
+
+void async_uart_cmd(char *ptr)
+{
+    while (1)
+    {
+        if (is_rbuf_empty())
+            continue;
+        
+        *ptr = uart_rbuf[ uart_rbuf_cur ];
+        uart_rbuf_cur = (uart_rbuf_cur+1) % UART_BUF_SIZE;
+        
+        if (*ptr == '\r' || *ptr == '\n')
+            break;
+        
+        async_uart_sendchr(*ptr);
+        ptr++;
+    }
+    *ptr = '\0';
 }

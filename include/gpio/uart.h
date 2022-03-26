@@ -14,9 +14,11 @@
 #define ARM_INT_REG_BASE (PERIF_ADDRESS + 0xB000)
 #define ARM_INT_IRQs1_REG (ARM_INT_REG_BASE + 0x210)
 
+extern AuxRegs *aux_regs;
+
 void uart_init();
 void uart_eint();
-void uart_int_handler();
+void uart_intr_handler();
 
 void uart_send(char c);
 void uart_send_num(char *buf, int num);
@@ -28,7 +30,9 @@ void uart_recvline(char *ptr);
 
 void uart_cmd(char *ptr);
 
+void async_uart_cmd(char *ptr);
 void async_uart_sendchr(char c);
 void async_uart_sendstr(const char *str);
+
 
 #endif /* _GPIO_UART_H_ */

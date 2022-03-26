@@ -5,8 +5,9 @@
         from_el2_to_el1, \
         from_el1_to_el0, \
         timer_init, \
-        uart_int_handler, \
-        irq_handler
+        uart_intr_handler, \
+        irq_handler, \
+        timer_intr_handler
 
 _kernel:
     ldr x1, =dtb_base
@@ -22,12 +23,24 @@ _kernel:
     ldr x0, =_stack
     mov sp, x0
 
+    # Enable timer for ARM
+    mov x0, 1
+    msr cntp_ctl_el0, x0
+
     # Run kernel
     b kernel
 
 from_el2_to_el1:
+    # Allow select stack
+    mov x0, 1
+    msr spsel, x0
+
+    mov x0, 0x1000000
+    msr sp_el1, x0
+
     mov x0, (1 << 31)
     mrs x1, hcr_el2
+
     # Mark EL1 is AArch64 in hypervisor control register
     orr x0, x0, x1
     msr hcr_el2, x0
@@ -60,29 +73,8 @@ from_el1_to_el0:
 
     eret
 
-#define CORE0_TIMER_IRQ_CTRL 0x40000040
-#define CORE0_INTERRUPT_SRC  0x40000060
-timer_init:
-    # Get timer frequency
-    mrs x1, cntfrq_el0
-
-    # Set timer
-    mul x1, x1, x0
-    msr cntp_tval_el0, x1
-
-    # Enable timer for ARM
-    mov x0, 1
-    msr cntp_ctl_el0, x0
-
-    # Enable timer for Arm core0 timer IRQ
-    mov x0, 2
-    ldr x1, =CORE0_TIMER_IRQ_CTRL
-    str w0, [x1]
-
-    ret
-
 # Save general registers to stack
-.macro save_all
+.macro save_greg
     sub sp, sp, 32 * 8
     stp x0, x1, [sp ,16 * 0]
     stp x2, x3, [sp ,16 * 1]
@@ -102,8 +94,15 @@ timer_init:
     str x30, [sp, 16 * 15]
 .endm
 
+.macro save_intr_reg
+    sub sp, sp, 4 * 8
+    mrs x0, elr_el1
+    mrs x1, spsr_el1
+    stp x0, x1, [sp ,16 * 15 + 8]
+.endm
+
 # Load general registers from stack
-.macro load_all
+.macro load_greg
     ldp x0, x1, [sp ,16 * 0]
     ldp x2, x3, [sp ,16 * 1]
     ldp x4, x5, [sp ,16 * 2]
@@ -123,6 +122,13 @@ timer_init:
     add sp, sp, 32 * 8
 .endm
 
+.macro load_intr_reg
+    ldp x0, x1, [sp ,16 * 15 + 8]
+    msr elr_el1, x0
+    msr spsr_el1, x1
+    add sp, sp, 4 * 8
+.endm
+
 # .align 7 means 2^7 alignment
 .balign 0x800
 exception_handler_table:
@@ -139,15 +145,9 @@ exception_handler_table:
     bl dummy_handler
 .align 7
     # 4
-    eret
     bl dummy_handler
 .align 7
     # 5 - SP_ELx - IRQ
-
-    # Disable interrupt
-    msr DAIFSet, 0xf
-
-    save_all
     b _irq_handler_wrapper
 
 .align 7
@@ -158,7 +158,7 @@ exception_handler_table:
     bl dummy_handler
 
 .align 7
-    save_all
+    save_greg
     # 8 - Lower exception level - synchronous event
     mrs x0, esr_el1
 
@@ -211,13 +211,19 @@ svc_handler:
     ldr x0, [x2, x1, lsl#3]
     blr x0    
 
-    load_all
+    load_greg
     eret
 
 _irq_handler_wrapper:
-    bl irq_handler
-    load_all
+    save_greg
+    save_intr_reg
 
+    bl irq_handler
+
+    msr DAIFSet, 0xf
+    load_intr_reg
+    load_greg
+    
     eret
 
 .section ".data"
