@@ -108,6 +108,7 @@ FILTER = $(foreach v,$(2),$(if $(findstring $(1),$(v)),$(v),))
 BOOT_OBJ_FILES =  $(call FILTER,printf.c.o, $(LIB_OBJ_FILES))
 BOOT_OBJ_FILES += $(call FILTER,uart.c.o, $(LIB_OBJ_FILES))
 BOOT_OBJ_FILES += $(call FILTER,util.c.o, $(LIB_OBJ_FILES))
+BOOT_OBJ_FILES += $(call FILTER,irq.c.o, $(LIB_OBJ_FILES))
 
 test:
 	@echo $(LIB_OBJ_FILES)

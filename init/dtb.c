@@ -1,6 +1,6 @@
 #include <init/initramfs.h>
 #include <lib/printf.h>
-#include <kernel/dtb.h>
+#include <init/dtb.h>
 #include <util.h>
 #include <types.h>
 

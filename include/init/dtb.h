@@ -1,5 +1,5 @@
-#ifndef _KERNEL_DTB_H_
-#define _KERNEL_DTB_H_
+#ifndef _INIT_DTB_H_
+#define _INIT_DTB_H_
 
 #include <util.h>
 #define DTB_MAGIC 0xd00dfeed

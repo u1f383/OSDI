@@ -4,7 +4,6 @@
 .global _kernel, \
         from_el2_to_el1, \
         from_el1_to_el0, \
-        timer_init, \
         uart_intr_handler, \
         irq_handler, \
         timer_intr_handler

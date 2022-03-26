@@ -1,5 +1,6 @@
 #include <gpio/uart.h>
 #include <gpio/gpio.h>
+#include <interrupt/irq.h>
 #include <util.h>
 
 #define UART_BUF_SIZE 0x100
@@ -11,7 +12,6 @@ int32_t uart_rbuf_top = 0;
 int32_t uart_rbuf_cur = 0;
 int32_t uart_wbuf_top = 0;
 int32_t uart_wbuf_cur = 0;
-
 
 static inline int is_wbuf_empty()
 {

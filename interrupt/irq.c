@@ -1,9 +1,10 @@
-#include <kernel/irq.h>
+#include <interrupt/irq.h>
 #include <gpio/uart.h>
 #include <types.h>
 #include <util.h>
 
 #define TIME_JOB_NUM 0x10
+#define TASK_ENTRY_NUM 0x10
 
 typedef struct _TimeJob
 {
@@ -11,10 +12,23 @@ typedef struct _TimeJob
     void (*callback)(void*);
     void *arg;
 } TimeJob;
-
 /* TODO: implement in RB tree */
 TimeJob time_jobs[TIME_JOB_NUM];
 uint32_t time_jobs_top;
+
+#define TASK_MODE_LILO 0b0
+#define TASK_MODE_FILO 0b1
+
+#define TASK_MODE TASK_MODE_LILO
+typedef struct _TaskEntry
+{
+    int32_t prio;
+    void (*callback)(void*);
+    void *arg;
+} TaskEntry;
+TaskEntry task_entries[TASK_ENTRY_NUM];
+uint32_t task_entries_cur = 0;
+uint32_t task_entries_top;
 
 static inline int is_time_job_fill()
 {
@@ -75,6 +89,59 @@ void add_timer(void(*callback)(void*), void *arg, uint32_t duration)
     }
     time_jobs_top++;
     __asm__("msr DAIFClr, 0xf");
+}
+
+static inline int is_task_fill()
+{
+    if (TASK_MODE == TASK_MODE_FILO)
+        return task_entries_top == TASK_ENTRY_NUM;
+    
+    /* TASK_MODE_LILO */
+    return task_entries_top == task_entries_cur - 1 ||
+            task_entries_top == task_entries_cur - TASK_ENTRY_NUM + 1;
+}
+
+static inline int is_task_empty()
+{
+    if (TASK_MODE == TASK_MODE_FILO)
+        return task_entries_top == 0;
+    
+    /* TASK_MODE_LILO */
+    return task_entries_top == task_entries_cur;
+}
+
+void add_task(void (*callback)(void*), void *arg, int32_t prio)
+{
+    if (is_task_fill())
+        return;
+
+    if (TASK_MODE == TASK_MODE_FILO)
+        task_entries[ task_entries_top++ ] = (TaskEntry) { .callback=callback, .arg=arg, .prio=prio };
+    else
+    {
+        task_entries[ task_entries_top ] = (TaskEntry) { .callback=callback, .arg=arg, .prio=prio };
+        task_entries_top = (task_entries_top+1) % TASK_ENTRY_NUM;
+    }
+}
+
+void do_task()
+{
+    if (is_task_empty())
+        return;
+
+    while (!is_task_empty())
+    {
+        if (TASK_MODE == TASK_MODE_FILO)
+        {
+            task_entries[ task_entries_cur ].callback(task_entries[ task_entries_cur ].arg);
+            task_entries_cur = (task_entries_cur+1) % TASK_ENTRY_NUM;
+        }
+        else
+        {
+            task_entries[ task_entries_top-1 ].callback(task_entries[ task_entries_top-1 ].arg);
+            task_entries_top--;
+        }
+    }
 }
 
 void timer_intr_handler()

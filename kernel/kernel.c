@@ -1,14 +1,13 @@
 #include <init/initramfs.h>
 #include <kernel/kernel.h>
-#include <kernel/dtb.h>
-#include <kernel/irq.h>
+#include <interrupt/irq.h>
+#include <init/dtb.h>
 #include <lib/printf.h>
 #include <gpio/uart.h>
 #include <arm/mm.h>
 
 extern uint64_t dtb_base;
 extern void from_el1_to_el0(uint64_t prog_ep);
-extern void timer_init(uint64_t secs);
 
 void init_cpio(int node_type, char *prop_name, char *value, int len)
 {
@@ -77,5 +76,7 @@ void kernel()
             else
                 from_el1_to_el0((uint64_t) program);
         }
+
+        do_task();
     }
 }

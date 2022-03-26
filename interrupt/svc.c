@@ -1,5 +1,5 @@
 #include <types.h>
-#include <kernel/svc.h>
+#include <interrupt/svc.h>
 #include <lib/printf.h>
 
 uint64_t svc_table[SVC_NUM] =
