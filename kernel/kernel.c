@@ -52,8 +52,7 @@ void kernel()
     printf("boot_time: %x\r\n", boot_time);
 
     add_timer(uart_sendstr, "1\r\n", 1);
-    add_timer(uart_sendstr, "2\r\n", 2);
-    add_timer(uart_sendstr, "5\r\n", 5);
+    add_timer(uart_sendstr, "3\r\n", 2);
 
     /* Enable UART interrupt */
     uart_eint();
@@ -76,7 +75,5 @@ void kernel()
             else
                 from_el1_to_el0((uint64_t) program);
         }
-
-        do_task();
     }
 }

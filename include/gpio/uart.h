@@ -18,7 +18,7 @@ extern AuxRegs *aux_regs;
 
 void uart_init();
 void uart_eint();
-void uart_intr_handler();
+void uart_intr_handler(reg32 orig_ier);
 
 void uart_send(char c);
 void uart_send_num(char *buf, int num);

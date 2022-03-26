@@ -18,8 +18,8 @@ uint32_t time_jobs_top;
 
 #define TASK_MODE_LILO 0b0
 #define TASK_MODE_FILO 0b1
-
 #define TASK_MODE TASK_MODE_LILO
+
 typedef struct _TaskEntry
 {
     int32_t prio;
@@ -28,7 +28,8 @@ typedef struct _TaskEntry
 } TaskEntry;
 TaskEntry task_entries[TASK_ENTRY_NUM];
 uint32_t task_entries_cur = 0;
-uint32_t task_entries_top;
+uint32_t task_entries_top = 0;
+uint64_t task_first = 1;
 
 static inline int is_time_job_fill()
 {
@@ -182,17 +183,41 @@ void timer_intr_handler()
         time_jobs[0] = tmp_tjob;
 
         write_sysreg(cntp_tval_el0, time_jobs[0].duration);
-    } else
-        disble_timer();
+        enable_timer();
+    }
 }
 
 void irq_handler()
 {
     uint32_t int_src = *(uint32_t *) CORE0_INTERRUPT_SRC;
-
+    uint32_t _loc_task_first;
+    
     /* Timer handling - check if CNTPNSIRQ interrupt bit is set */
     if (int_src & 0b10)
-        timer_intr_handler();
+    {
+        disble_timer();
+        add_task(timer_intr_handler, NULL, 0);
+    }
     else if (aux_regs->mu_iir & 0b110)
-        uart_intr_handler();
+    {
+        /* Mask UART interrupt */
+        add_task(uart_intr_handler, aux_regs->mu_ier, 2);
+        set_value(aux_regs->mu_ier, 0, AUXMUIER_Enable_receive_interrupts_BIT, AUXMUIER_RESERVED_BIT);
+    }
+
+    if (task_first) {
+        _loc_task_first = 1;
+        task_first = 0;
+    } else {
+        _loc_task_first = 0;
+    }
+    /* Enable interrupt */
+    __asm__ volatile ("msr DAIFClr, 0xf");
+
+    if (_loc_task_first)
+    {
+        while (!is_task_empty())
+            do_task();
+        task_first = 1;
+    }
 }

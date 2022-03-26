@@ -85,12 +85,9 @@ void uart_eint()
                                     AUXMUIER_Enable_transmit_interrupts_BIT);
 }
 
-void uart_intr_handler()
+void uart_intr_handler(reg32 orig_ier)
 {
     reg32 orig_iir = aux_regs->mu_iir;
-    reg32 orig_ier = aux_regs->mu_ier;
-    set_value(aux_regs->mu_ier, 0, AUXMUIER_Enable_receive_interrupts_BIT, AUXMUIER_RESERVED_BIT);
-    __asm__ volatile ("msr DAIFClr, 0xf");
 
     /* Transmit holding register empty */
     if (orig_iir & 0b010)
@@ -110,8 +107,9 @@ void uart_intr_handler()
         uart_rbuf_top = (uart_rbuf_top+1) % UART_BUF_SIZE;
     }
 
-    set_value(aux_regs->mu_ier, orig_ier, AUXMUIER_Enable_receive_interrupts_BIT, AUXMUIER_RESERVED_BIT);
     set_value(aux_regs->mu_iir, 0, AUXMUIIR_FIFO_clear_bits_BIT, AUXMUIIR_ALWAYS_ZERO_BIT);
+    /* Unmask UART interrupt */
+    set_value(aux_regs->mu_ier, orig_ier, AUXMUIER_Enable_receive_interrupts_BIT, AUXMUIER_RESERVED_BIT);
 }
 
 void uart_send(char c)
