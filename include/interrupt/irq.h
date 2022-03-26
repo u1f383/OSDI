@@ -7,7 +7,7 @@
 #define CORE0_TIMER_IRQ_CTRL 0x40000040
 
 void add_timer(void (*callback)(void*), void *arg, uint32_t duration);
-void add_task(void (*callback)(void*), void *arg, int32_t prio);
+int add_task(void (*callback)(void*), void *arg, int32_t prio);
 void do_task();
 void irq_handler();
 

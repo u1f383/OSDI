@@ -1,5 +1,6 @@
 #include <interrupt/irq.h>
 #include <gpio/uart.h>
+#include <list.h>
 #include <types.h>
 #include <util.h>
 
@@ -13,7 +14,7 @@ typedef struct _TimeJob
     void *arg;
 } TimeJob;
 /* TODO: implement in RB tree */
-TimeJob time_jobs[TIME_JOB_NUM];
+TimeJob time_jobs[TIME_JOB_NUM] = {0};
 uint32_t time_jobs_top;
 
 #define TASK_MODE_LILO 0b0
@@ -25,11 +26,12 @@ typedef struct _TaskEntry
     int32_t prio;
     void (*callback)(void*);
     void *arg;
+    struct list_head list;
 } TaskEntry;
 TaskEntry task_entries[TASK_ENTRY_NUM];
-uint32_t task_entries_cur = 0;
-uint32_t task_entries_top = 0;
-uint64_t task_first = 1;
+TaskEntry *te_hdr = NULL;
+uint32_t task_entries_cnt = 0;
+uint64_t progress_taskq = 0;
 
 static inline int is_time_job_fill()
 {
@@ -94,35 +96,58 @@ void add_timer(void(*callback)(void*), void *arg, uint32_t duration)
 
 static inline int is_task_fill()
 {
-    if (TASK_MODE == TASK_MODE_FILO)
-        return task_entries_top == TASK_ENTRY_NUM;
-    
-    /* TASK_MODE_LILO */
-    return task_entries_top == task_entries_cur - 1 ||
-            task_entries_top == task_entries_cur - TASK_ENTRY_NUM + 1;
+    return task_entries_cnt == TASK_ENTRY_NUM;
 }
 
 static inline int is_task_empty()
 {
-    if (TASK_MODE == TASK_MODE_FILO)
-        return task_entries_top == 0;
-    
-    /* TASK_MODE_LILO */
-    return task_entries_top == task_entries_cur;
+    return task_entries_cnt == 0;
 }
 
-void add_task(void (*callback)(void*), void *arg, int32_t prio)
+TaskEntry *get_task_slot()
+{
+    for (int i = 0; i < TASK_ENTRY_NUM; i++)
+        if (task_entries[i].callback == NULL) {
+            task_entries_cnt++;
+            return &task_entries[i];
+        }
+    return NULL;
+}
+
+void del_task_slot(TaskEntry *te)
+{
+    task_entries_cnt--;
+    te->callback = NULL;
+    list_del(&te->list);
+}
+
+int add_task(void (*callback)(void*), void *arg, int32_t prio)
 {
     if (is_task_fill())
-        return;
+        return 0;
 
-    if (TASK_MODE == TASK_MODE_FILO)
-        task_entries[ task_entries_top++ ] = (TaskEntry) { .callback=callback, .arg=arg, .prio=prio };
-    else
-    {
-        task_entries[ task_entries_top ] = (TaskEntry) { .callback=callback, .arg=arg, .prio=prio };
-        task_entries_top = (task_entries_top+1) % TASK_ENTRY_NUM;
+    TaskEntry *te = get_task_slot();
+    te->arg = arg;
+    te->callback = callback;
+    te->prio = prio;
+    LIST_INIT(te->list);
+
+    if (task_entries_cnt == 1)
+        te_hdr = te;
+    else {
+        TaskEntry *te_iter = container_of(te_hdr->list.next, TaskEntry, list);
+        if (TASK_MODE == TASK_MODE_FILO)
+            while (te_iter->prio < prio && te_iter != te_hdr)
+                te_iter = container_of(te_iter->list.next, TaskEntry, list);
+        else
+            while (te_iter->prio <= prio && te_iter != te_hdr)
+                te_iter = container_of(te_iter->list.next, TaskEntry, list);
+
+        list_add(&te->list, te_iter->list.prev);
+        if (te_iter == te_hdr)
+            te_hdr = te;
     }
+    return (te_hdr == te);
 }
 
 void do_task()
@@ -130,18 +155,17 @@ void do_task()
     if (is_task_empty())
         return;
 
-    while (!is_task_empty())
+    TaskEntry *prev_hdr;
+
+    while (task_entries_cnt)
     {
-        if (TASK_MODE == TASK_MODE_FILO)
-        {
-            task_entries[ task_entries_cur ].callback(task_entries[ task_entries_cur ].arg);
-            task_entries_cur = (task_entries_cur+1) % TASK_ENTRY_NUM;
-        }
-        else
-        {
-            task_entries[ task_entries_top-1 ].callback(task_entries[ task_entries_top-1 ].arg);
-            task_entries_top--;
-        }
+        te_hdr->callback(te_hdr->arg);
+
+        __asm__("msr DAIFSet, 0xf");
+        prev_hdr = te_hdr;
+        te_hdr = container_of(te_hdr->list.next, TaskEntry, list);
+        del_task_slot(prev_hdr);
+        __asm__("msr DAIFClr, 0xf");
     }
 }
 
@@ -190,34 +214,35 @@ void timer_intr_handler()
 void irq_handler()
 {
     uint32_t int_src = *(uint32_t *) CORE0_INTERRUPT_SRC;
-    uint32_t _loc_task_first;
+    uint32_t highest_task = 0;
     
     /* Timer handling - check if CNTPNSIRQ interrupt bit is set */
     if (int_src & 0b10)
     {
+        highest_task = add_task(timer_intr_handler, NULL, 0);
         disble_timer();
-        add_task(timer_intr_handler, NULL, 0);
     }
     else if (aux_regs->mu_iir & 0b110)
     {
         /* Mask UART interrupt */
-        add_task(uart_intr_handler, aux_regs->mu_ier, 2);
+        highest_task = add_task(uart_intr_handler, aux_regs->mu_ier, 2);
         set_value(aux_regs->mu_ier, 0, AUXMUIER_Enable_receive_interrupts_BIT, AUXMUIER_RESERVED_BIT);
     }
 
-    if (task_first) {
-        _loc_task_first = 1;
-        task_first = 0;
-    } else {
-        _loc_task_first = 0;
-    }
     /* Enable interrupt */
-    __asm__ volatile ("msr DAIFClr, 0xf");
-
-    if (_loc_task_first)
+    if (!progress_taskq)
     {
-        while (!is_task_empty())
-            do_task();
-        task_first = 1;
+        progress_taskq = 1;
+        __asm__("msr DAIFClr, 0xf");
+        do_task();
+        progress_taskq = 0;
+    }
+    else if (highest_task)
+    {
+        __asm__("msr DAIFClr, 0xf");
+        te_hdr->callback(te_hdr->arg);
+        __asm__("msr DAIFSet, 0xf");
+        te_hdr = container_of(te_hdr->list.next, TaskEntry, list);
+        __asm__("msr DAIFClr, 0xf");        
     }
 }
