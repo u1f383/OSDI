@@ -4,7 +4,7 @@
 #include <types.h>
 #include <util.h>
 
-#define TIME_JOB_NUM 0x10
+#define TIME_JOB_NUM 0x30
 #define TASK_ENTRY_NUM 0x10
 
 typedef struct _TimeJob
@@ -49,7 +49,7 @@ static inline void enable_timer()
     *(uint32_t *) CORE0_TIMER_IRQ_CTRL = 2;
 }
 
-static inline void disble_timer()
+static inline void disable_timer()
 {
     *(uint32_t *) CORE0_TIMER_IRQ_CTRL = 0;
 }
@@ -157,8 +157,13 @@ void do_task()
 
     TaskEntry *prev_hdr;
 
-    while (task_entries_cnt)
+    while (1)
     {
+        __asm__("msr DAIFSet, 0xf");
+        if (!task_entries_cnt)
+            break;
+        __asm__("msr DAIFClr, 0xf");
+        
         te_hdr->callback(te_hdr->arg);
 
         __asm__("msr DAIFSet, 0xf");
@@ -167,12 +172,15 @@ void do_task()
         del_task_slot(prev_hdr);
         __asm__("msr DAIFClr, 0xf");
     }
+    __asm__("msr DAIFClr, 0xf");
 }
 
 void timer_intr_handler()
 {
     if (is_time_job_empty())
         return;
+
+    disable_timer();
 
     uint32_t delta = time_jobs[0].duration;
     int i = 0;
@@ -220,9 +228,9 @@ void irq_handler()
     if (int_src & 0b10)
     {
         highest_task = add_task(timer_intr_handler, NULL, 0);
-        disble_timer();
+        disable_timer();
     }
-    else if (aux_regs->mu_iir & 0b110)
+    else if (aux_regs->mu_iir & 0b110) // uart --> GPU --> core0
     {
         /* Mask UART interrupt */
         highest_task = add_task(uart_intr_handler, aux_regs->mu_ier, 2);

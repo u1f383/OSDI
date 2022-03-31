@@ -14,6 +14,6 @@ void svc0_handler()
     uint64_t elr_el1 = read_sysreg(elr_el1);
     uint64_t esr_el1 = read_sysreg(esr_el1);
     
-    printf("%x, %x, %x\n", spsr_el1, elr_el1, esr_el1);
+    printf("%x, %x, %x\r\n", spsr_el1, elr_el1, esr_el1);
     while (1);
 }

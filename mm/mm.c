@@ -144,6 +144,7 @@ void *buddy_alloc(uint64_t pg_sz)
     return (void *) page_to_phys(buddy);
 }
 
+/* HAS BUG */
 void buddy_split_2(Page *buddy_hdr, Zone *zone)
 {
     int32_t new_order = buddy_hdr->order - 1;

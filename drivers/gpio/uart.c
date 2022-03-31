@@ -107,7 +107,7 @@ void uart_intr_handler(reg32 orig_ier)
         uart_rbuf_top = (uart_rbuf_top+1) % UART_BUF_SIZE;
     }
 
-    set_value(aux_regs->mu_iir, 0, AUXMUIIR_FIFO_clear_bits_BIT, AUXMUIIR_ALWAYS_ZERO_BIT);
+    set_value(aux_regs->mu_iir, 0, AUXMUIIR_FIFO_clear_bits_BIT, AUXMUIIR_ALWAYS_ZERO_BIT); // maybe not need
     /* Unmask UART interrupt */
     set_value(aux_regs->mu_ier, orig_ier, AUXMUIER_Enable_receive_interrupts_BIT, AUXMUIER_RESERVED_BIT);
 }
