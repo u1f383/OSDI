@@ -2,11 +2,7 @@
 .section ".text.kern"
 
 .global _kernel, \
-        from_el2_to_el1, \
-        from_el1_to_el0, \
-        uart_intr_handler, \
-        irq_handler, \
-        timer_intr_handler
+        from_el1_to_el0
 
 _kernel:
     ldr x1, =dtb_base
@@ -142,13 +138,14 @@ exception_handler_table:
 .align 7
     # 3
     bl dummy_handler
+
+# -------------------------
 .align 7
     # 4
     bl dummy_handler
 .align 7
     # 5 - SP_ELx - IRQ
     b _irq_handler_wrapper
-
 .align 7
     # 6
     bl dummy_handler
@@ -156,6 +153,7 @@ exception_handler_table:
     # 7
     bl dummy_handler
 
+# -------------------------
 .align 7
     save_greg
     # 8 - Lower exception level - synchronous event
@@ -170,7 +168,6 @@ exception_handler_table:
 
     # Do nothing
     bl dummy_handler
-
 .align 7
     # 9 - Lower exception level - IRQ
 .align 7
@@ -180,6 +177,7 @@ exception_handler_table:
     # 11
     bl dummy_handler
 
+# -------------------------
 .align 7
     # 12
     bl dummy_handler
@@ -192,8 +190,8 @@ exception_handler_table:
 .align 7
     # 15
     bl dummy_handler
-.align 7
 
+.align 7
 dummy_handler:
     b dummy_handler
 

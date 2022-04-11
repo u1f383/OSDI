@@ -28,7 +28,6 @@ cp_boot:
     br x0
 
 _real_start:    
-    # TODO: Disable interrupt
     mrs x0, mpidr_el1
     # Get the core number
     and x0, x0, #0xff

@@ -34,5 +34,10 @@ void async_uart_cmd(char *ptr);
 void async_uart_sendchr(char c);
 void async_uart_sendstr(const char *str);
 
+static inline void disable_uart()
+{
+    set_value(aux_regs->mu_ier, 0, AUXMUIER_Enable_receive_interrupts_BIT, AUXMUIER_RESERVED_BIT);
+}
+
 
 #endif /* _GPIO_UART_H_ */

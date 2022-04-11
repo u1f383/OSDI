@@ -12,6 +12,8 @@ typedef unsigned short uint16_t;
 typedef unsigned uint32_t;
 typedef unsigned long uint64_t;
 
+typedef uint8_t bool;
+
 /* REGISTER DATA TYPE DEFINITION */
 /**
  * Use "volatile" to make sure before accessing the variable,

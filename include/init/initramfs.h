@@ -19,16 +19,16 @@ extern char *cpio_start, *cpio_end;
 
 typedef struct _Cpio_header
 {
-    uint64_t c_ino; /* I-number of file */
-    uint8_t c_mode; /* File mode */
-    uid_t c_uid; /* Owner user ID */
-    gid_t c_gid; /* Owner uroup ID */
-    uint64_t c_nlink; /* Number of links to file */
-    time64_t c_mtime; /* Modification time */
+    uint64_t c_ino;      /* I-number of file */
+    uint8_t c_mode;      /* File mode */
+    uid_t c_uid;         /* Owner user ID */
+    gid_t c_gid;         /* Owner uroup ID */
+    uint64_t c_nlink;    /* Number of links to file */
+    time64_t c_mtime;    /* Modification time */
     uint64_t c_filesize; /* Length of file */
     uint64_t c_devmajor; /* Major device number */
     uint64_t c_devminor; /* Minor device number */
-    uint32_t c_rdev; /* Device major/minor for special file */
+    uint32_t c_rdev;     /* Device major/minor for special file */
     uint64_t c_namesize; /* Length of filename */
 } Cpio_header;
 

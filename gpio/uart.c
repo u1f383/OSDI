@@ -6,33 +6,33 @@
 #define UART_BUF_SIZE 0x100
 
 AuxRegs *aux_regs;
-char uart_rbuf[ UART_BUF_SIZE ];
-char uart_wbuf[ UART_BUF_SIZE ];
-int32_t uart_rbuf_top = 0;
-int32_t uart_rbuf_cur = 0;
-int32_t uart_wbuf_top = 0;
-int32_t uart_wbuf_cur = 0;
+char uart_rx[ UART_BUF_SIZE ];
+char uart_tx[ UART_BUF_SIZE ];
+int32_t uart_rx_head = 0;
+int32_t uart_rx_tail = 0;
+int32_t uart_tx_head = 0;
+int32_t uart_tx_tail = 0;
 
-static inline int is_wbuf_empty()
+static inline int is_tx_empty()
 {
-    return uart_wbuf_top == uart_wbuf_cur;
+    return uart_tx_head == uart_tx_tail;
 }
 
-static inline int is_wbuf_fill()
+static inline int is_tx_fill()
 {
-    return uart_wbuf_top == uart_wbuf_cur-1 ||
-           uart_wbuf_top == uart_wbuf_cur - UART_BUF_SIZE + 1;
+    return uart_tx_head == uart_tx_tail-1 ||
+           uart_tx_head == uart_tx_tail - UART_BUF_SIZE + 1;
 }
 
-static inline int is_rbuf_empty()
+static inline int is_rx_empty()
 {
-    return uart_rbuf_top == uart_rbuf_cur;
+    return uart_rx_head == uart_rx_tail;
 }
 
-static inline int is_rbuf_fill()
+static inline int is_rx_fill()
 {
-    return uart_rbuf_top == uart_rbuf_cur-1 ||
-           uart_rbuf_top == uart_rbuf_cur - UART_BUF_SIZE + 1;
+    return uart_rx_head == uart_rx_tail-1 ||
+           uart_rx_head == uart_rx_tail - UART_BUF_SIZE + 1;
 }
 
 void uart_init()
@@ -92,22 +92,21 @@ void uart_intr_handler(reg32 orig_ier)
     /* Transmit holding register empty */
     if (orig_iir & 0b010)
     {
-        if (!is_wbuf_empty())
+        if (!is_tx_empty())
         {
-            set_value(aux_regs->mu_io, uart_wbuf[ uart_wbuf_cur ], AUXMUIO_Transmit_data_write_BIT, AUXMUIO_RESERVED_BIT);
-            uart_wbuf_cur = (uart_wbuf_cur+1) % UART_BUF_SIZE;
+            set_value(aux_regs->mu_io, uart_tx[ uart_tx_tail ], AUXMUIO_Transmit_data_write_BIT, AUXMUIO_RESERVED_BIT);
+            uart_tx_tail = (uart_tx_tail+1) % UART_BUF_SIZE;
         }
         else
             orig_ier &= ~(0b10);
     }
     /* Receiver holds valid byte */
-    else if ((orig_iir & 0b100) && !is_rbuf_fill())
+    else if ((orig_iir & 0b100) && !is_rx_fill())
     {
-        uart_rbuf[ uart_rbuf_top ] = get_bits(aux_regs->mu_io, AUXMUIO_Receive_data_read_BIT, AUXMUIO_RESERVED_BIT);
-        uart_rbuf_top = (uart_rbuf_top+1) % UART_BUF_SIZE;
+        uart_rx[ uart_rx_head ] = get_bits(aux_regs->mu_io, AUXMUIO_Receive_data_read_BIT, AUXMUIO_RESERVED_BIT);
+        uart_rx_head = (uart_rx_head+1) % UART_BUF_SIZE;
     }
 
-    set_value(aux_regs->mu_iir, 0, AUXMUIIR_FIFO_clear_bits_BIT, AUXMUIIR_ALWAYS_ZERO_BIT); // maybe not need
     /* Unmask UART interrupt */
     set_value(aux_regs->mu_ier, orig_ier, AUXMUIER_Enable_receive_interrupts_BIT, AUXMUIER_RESERVED_BIT);
 }
@@ -166,10 +165,10 @@ void uart_sendstr(const char *str)
 
 void async_uart_sendchr(char c)
 {
-    if (!is_wbuf_fill())
+    if (!is_tx_fill())
     {
-        uart_wbuf[ uart_wbuf_top ] = c;
-        uart_wbuf_top = (uart_wbuf_top+1) % UART_BUF_SIZE;
+        uart_tx[ uart_tx_head ] = c;
+        uart_tx_head = (uart_tx_head+1) % UART_BUF_SIZE;
         set_value(aux_regs->mu_ier, aux_regs->mu_ier | 0b10,
                 AUXMUIER_Enable_receive_interrupts_BIT, AUXMUIER_RESERVED_BIT);
     }
@@ -177,13 +176,13 @@ void async_uart_sendchr(char c)
 
 void async_uart_sendstr(const char *str)
 {
-    if (*str == '\0' || is_wbuf_fill())
+    if (*str == '\0' || is_tx_fill())
         return;
 
-    while (!is_wbuf_fill() && *str)
+    while (!is_tx_fill() && *str)
     {
-        uart_wbuf[ uart_wbuf_top ] = *str++;
-        uart_wbuf_top = (uart_wbuf_top+1) % UART_BUF_SIZE;
+        uart_tx[ uart_tx_head ] = *str++;
+        uart_tx_head = (uart_tx_head+1) % UART_BUF_SIZE;
     }
 
     set_value(aux_regs->mu_ier, aux_regs->mu_ier | 0b10,
@@ -194,11 +193,11 @@ void async_uart_cmd(char *ptr)
 {
     while (1)
     {
-        if (is_rbuf_empty())
+        if (is_rx_empty())
             continue;
         
-        *ptr = uart_rbuf[ uart_rbuf_cur ];
-        uart_rbuf_cur = (uart_rbuf_cur+1) % UART_BUF_SIZE;
+        *ptr = uart_rx[ uart_rx_tail ];
+        uart_rx_tail = (uart_rx_tail+1) % UART_BUF_SIZE;
         
         if (*ptr == '\r' || *ptr == '\n')
             break;

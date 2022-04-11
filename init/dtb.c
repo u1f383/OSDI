@@ -74,8 +74,7 @@ void parse_dtb(char *dtb, void(*callback)(int,char*,char*,int))
         prop_name = NULL;
         prop_len = 0;
         
-        switch (node_type)
-        {
+        switch (node_type) {
         case FDT_BEGIN_NODE:
             level++;
 
