@@ -4,7 +4,8 @@
 int strlen(const char *s1)
 {
     const char *s2 = s1;
-    while(*s1++);
+    while(*s1)
+        s1++;
 
     return s1 - s2;
 }
@@ -77,33 +78,25 @@ __asm__(
 
 uint64_t ceiling_2(uint64_t value)
 {
-    if (value == 0)
+    int8_t _bit;
+    if ((_bit = log_2(value)) == -1)
         return 0;
-
-    int cnt = 0;
-    int _bit = -1;
-
-    while (value)
-    {
-        if (value & 1)
-            cnt++;
-        
-        _bit++;
-        value >>= 1;
-    }
-
-    if (cnt > 1)
-        return (1 << (_bit + 1));
     
-    return 1 << _bit;
+    return _ceil(value, _bit);
 }
 
-uint8_t log_2(uint64_t value)
+uint64_t floor_2(uint64_t value)
 {
-    if (value == 0)
+    int8_t _bit;
+    if ((_bit = log_2(value)) == -1)
         return 0;
+    
+    return _floor(value, _bit);
+}
 
-    uint8_t _bit = 0;
+int8_t log_2(uint64_t value)
+{
+    int8_t _bit = 0;
     while (value)
     {
         _bit++;

@@ -28,12 +28,6 @@ typedef struct _Fdt_rsv_entry
     uint64_t size;
 } Fdt_rsv_entry;
 
-typedef struct _Fdt_node
-{
-    uint32_t len;
-    uint32_t nameoff;
-} Fdt_node;
-
 #define FDT_BEGIN_NODE 0x00000001
 #define FDT_END_NODE   0x00000002
 #define FDT_PROP       0x00000003

@@ -14,10 +14,6 @@ _kernel:
     ldr x0, =exception_handler_table
     msr vbar_el1, x0
 
-    # Setup kernel stack
-    ldr x0, =_stack
-    mov sp, x0
-
     # Enable timer for ARM
     mov x0, 1
     msr cntp_ctl_el0, x0
@@ -30,7 +26,8 @@ from_el2_to_el1:
     mov x0, 1
     msr spsel, x0
 
-    mov x0, 0x1000000
+    # Setup kernel stack
+    ldr x0, =_stack
     msr sp_el1, x0
 
     mov x0, (1 << 31)
@@ -53,12 +50,13 @@ from_el2_to_el1:
     msr elr_el2, lr
     eret
 
+#define user_stack 0x100000 /* also define in mm/mm.c */
 from_el1_to_el0:
     # Return to user program
     msr elr_el1, x0
     
     # Setup user program stack pointer
-    mov x0, 0x10000000
+    mov x0, user_stack
     msr sp_el0, x0
 
     # Set exception mode to EL0t

@@ -37,14 +37,14 @@ void kernel()
 {
     uint64_t boot_time = read_sysreg(cntpct_el0);
 
+    /* Mem init */
+    page_init();
+    buddy_init();
+
     /* UART init */
     uart_init();
     printf_init(uart_sendstr);
     
-    /* MM init */
-    mem_map_init();
-    node_init();
-
     /* CPIO init */
     parse_dtb((char *) dtb_base, init_cpio);
 
@@ -53,28 +53,7 @@ void kernel()
 
     /* Enable UART interrupt */
     uart_eint();
-
-    add_timer(uart_sendstr, "0000000000000000\r\n", 3);
-    add_timer(uart_sendstr, "1111111111111111\r\n", 3);
-    add_timer(uart_sendstr, "2222222222222222\r\n", 3);
-    add_timer(uart_sendstr, "3333333333333333\r\n", 3);
-    add_timer(uart_sendstr, "4444444444444444\r\n", 3);
-    add_timer(uart_sendstr, "5555555555555555\r\n", 3);
-    add_timer(uart_sendstr, "6666666666666666\r\n", 3);
-    add_timer(uart_sendstr, "7777777777777777\r\n", 3);
-    add_timer(uart_sendstr, "8888888888888888\r\n", 3);
-    add_timer(uart_sendstr, "9999999999999999\r\n", 3);
-    add_timer(uart_sendstr, "10101010101010101010101010101010\r\n", 3);
-    add_timer(uart_sendstr, "11111111111111111111111111111111\r\n", 3);
-    add_timer(uart_sendstr, "12121212121212121212121212121212\r\n", 3);
-    add_timer(uart_sendstr, "13131313131313131313131313131313\r\n", 3);
-    add_timer(uart_sendstr, "14141414141414141414141414141414\r\n", 3);
-    add_timer(uart_sendstr, "15151515151515151515151515151515\r\n", 3);
-    add_timer(uart_sendstr, "16161616161616161616161616161616\r\n", 3);
-    add_timer(uart_sendstr, "17171717171717171717171717171717\r\n", 3);
-    add_timer(uart_sendstr, "18181818181818181818181818181818\r\n", 3);
-    add_timer(uart_sendstr, "19191919191919191919191919191919\r\n", 3);
-
+    
     char cmd[0x20];
     while (1)
     {
@@ -93,24 +72,24 @@ void kernel()
             else
                 from_el1_to_el0((uint64_t) program);
         } else if (!strncmp(cmd, "set_timeout", 11)) {
-            char *ptr = cmd;
-            char *tmp, *msg;
-            uint32_t timeout;
+            // char *ptr = cmd;
+            // char *tmp, *msg;
+            // uint32_t timeout;
 
-            while (*ptr && *ptr++ != ' ');
-            if (*ptr == '\0')
-                continue;
-            tmp = ptr;
+            // while (*ptr && *ptr++ != ' ');
+            // if (*ptr == '\0')
+            //     continue;
+            // tmp = ptr;
 
-            while (*ptr && *++ptr != ' ')
-            if (*ptr == '\0')
-                continue;
-            *ptr++ = '\0';
-            timeout = strtou(ptr, 10);
+            // while (*ptr && *++ptr != ' ')
+            // if (*ptr == '\0')
+            //     continue;
+            // *ptr++ = '\0';
+            // timeout = strtou(ptr, 10);
 
-            msg = buddy_alloc(10);
-            strcpy(msg, tmp);
-            add_timer(uart_sendstr, msg, timeout);
+            // msg = buddy_alloc(10);
+            // strcpy(msg, tmp);
+            // add_timer(uart_sendstr, msg, timeout);
         }
     }
 }
