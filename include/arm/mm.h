@@ -26,22 +26,44 @@ typedef struct _Page {
     #define PAGE_FLAG_FREED (0)
     #define PAGE_FLAG_RSVD  (1<<0)
     #define PAGE_FLAG_ALLOC (1<<1)
+    #define PAGE_FLAG_BODY  (1<<2)
     
-    /* Order of buddy system, and used to check the page is hdr or body, too */
+    /* Order of buddy system, and used to check the page is head or body, too */
     int8_t order;
     #define PAGE_ORDER_MAX  11
     #define PAGE_ORDER_BODY (-1)
+    #define PAGE_ORDER_UND  (-2)
 } Page;
 
 typedef struct _FreeArea {
     struct list_head list;
 } FreeArea;
 
+static const uint32_t slab_size_pool[] = \
+{
+    16, 32, 48, 96, 128, 256, 512, 1024,
+    2048, 3172, 4096, 8192, 16384, 32768, 65536
+};
+#define SLAB_POOL_SIZE (sizeof(slab_size_pool) / sizeof(slab_size_pool[0]))
+typedef struct _Slab {
+    struct list_head list;
+} Slab;
+typedef struct _SlabCache {
+    uint16_t size;
+    addr_t start;
+    addr_t end;
+    Slab slab;
+    struct list_head cache_list;
+} SlabCache;
+extern SlabCache *slab_cache_ptr[SLAB_POOL_SIZE];
+
 void page_init();
 void buddy_init();
+void slab_init();
 void memory_reserve(uint64_t start, uint64_t end);
 
 char* buddy_alloc(uint32_t req_pgcnt);
-void buddy_free(char *chk);
+char* kmalloc(uint32_t sz);
+int32_t buddy_free(char *chk);
 
 #endif /* _ARM_MM_H_ */

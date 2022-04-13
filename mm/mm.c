@@ -25,9 +25,12 @@ RsvdMem user_rsvd_memory[] = {
 };
 
 static bool is_buddy_init = 0;
+
 FreeArea *free_area[PAGE_ORDER_MAX+1];
 Page *mem_map;
 uint64_t gb_pgcnt;
+
+SlabCache *slab_cache_ptr[SLAB_POOL_SIZE];
 
 /**
  * ============ startup allocator ============
@@ -75,12 +78,12 @@ void memory_reserve(uint64_t start, uint64_t end)
 
     while (pg_iter != pg_end) {
         pg_iter->flags = PAGE_FLAG_RSVD;
-        pg_iter->order = PAGE_ORDER_BODY;
+        pg_iter->order = PAGE_ORDER_UND;
         pg_iter++;
     }
     /* Last one */
     pg_iter->flags = PAGE_FLAG_RSVD;
-    pg_iter->order = PAGE_ORDER_BODY;
+    pg_iter->order = PAGE_ORDER_UND;
 }
 
 static inline void del_fa(FreeArea *victim, int8_t order)
@@ -123,7 +126,7 @@ void buddy_init()
 
         while (!is_page_rsvd(pg_iter) && pg_iter != pg_end) {
             pg_iter->order = PAGE_ORDER_BODY;
-            pg_iter->flags = PAGE_FLAG_FREED;
+            pg_iter->flags = PAGE_FLAG_BODY;
             pg_iter++;
         }
 
@@ -155,7 +158,7 @@ char* buddy_alloc(uint32_t req_pgcnt)
     req_pgcnt = ceiling_2(req_pgcnt);
     int32_t order = log_2(req_pgcnt);
 
-    if (order == -1 || order > PAGE_ORDER_MAX)
+    if (order > PAGE_ORDER_MAX)
         return NULL;
 
     int32_t curr_order = order;
@@ -163,6 +166,7 @@ char* buddy_alloc(uint32_t req_pgcnt)
             (uint64_t) free_area[curr_order] == FREEAREA_UND)
         curr_order++;
     
+    /* Out of memory */
     if (curr_order > PAGE_ORDER_MAX)
         return NULL;
 
@@ -170,31 +174,32 @@ char* buddy_alloc(uint32_t req_pgcnt)
     del_fa(free_area[curr_order], curr_order);
 
     Page *pg = phys_to_page(ret);
-    Page *pg_iter = pg;
-    for (int i = 0; i < req_pgcnt; pg_iter++, i++)
-        pg_iter->flags = PAGE_FLAG_ALLOC;
     
     /* Need to split buddy */
-    if (order < curr_order)
+    while (order < curr_order)
     {
-        pg->order = curr_order-1;
-        pg_iter->order = curr_order-1;
+        curr_order--;
 
-        FreeArea *fa = page_to_phys(pg_iter);
+        Page *next_pg = pg + (1 << curr_order);
+        next_pg->order = curr_order;
+
+        FreeArea *fa = page_to_phys(next_pg);
         LIST_INIT(fa->list);
-        add_fa(fa, pg_iter->order);
+        add_fa(fa, next_pg->order);
     }
-    else
-        pg->order = order;
 
+    pg->order = order;
+    pg->flags = PAGE_FLAG_ALLOC;
     return ret;
 }
 
-void buddy_free(char *chk)
+int32_t buddy_free(char *chk)
 {
     Page *pg = phys_to_page(chk);
-    if (pg->order == PAGE_ORDER_BODY || pg->flags == PAGE_FLAG_FREED)
-        return;
+    if ( (pg->order == PAGE_ORDER_UND || pg->flags == PAGE_FLAG_RSVD)  || /* reserved memory */
+         (pg->order == PAGE_ORDER_BODY || pg->flags == PAGE_FLAG_BODY) || /* body */
+          pg->flags == PAGE_FLAG_FREED /* head has been freed */)
+        return -1;
 
     Page *cons_chk;
     FreeArea *cons_fa;
@@ -208,6 +213,7 @@ void buddy_free(char *chk)
             del_fa(page_to_phys(cons_chk), pg->order);
 
             cons_chk->order = PAGE_ORDER_BODY;
+            cons_chk->flags = PAGE_FLAG_BODY;
             pg->order++;
             continue;
         }
@@ -226,6 +232,7 @@ void buddy_free(char *chk)
             del_fa(page_to_phys(cons_chk), curr_order);
 
             prev_cons_chk->order = PAGE_ORDER_BODY;
+            prev_cons_chk->flags = PAGE_FLAG_BODY;
             cons_chk->order++;
 
             prev_cons_chk = cons_chk;
@@ -237,4 +244,112 @@ void buddy_free(char *chk)
 
     cons_fa = page_to_phys(prev_cons_chk);
     add_fa(cons_fa, curr_order);
+
+    return 0;
+}
+
+SlabCache* slab_cache_new(uint32_t sz)
+{
+    SlabCache *new_cache = buddy_alloc(32);
+    new_cache->size = sz;
+    new_cache->start = ((char *) new_cache) + sizeof(SlabCache);
+    new_cache->end = ((char *) new_cache) + (32*PAGE_SIZE);
+                        
+    LIST_INIT(new_cache->slab.list);
+    LIST_INIT(new_cache->cache_list);
+    new_cache->end -= ((32*PAGE_SIZE - sizeof(SlabCache)) % new_cache->size);
+
+    Slab *slab_chk = new_cache + 1;
+    while (slab_chk < new_cache->end)
+    {
+        LIST_INIT(slab_chk->list);
+        list_add(&slab_chk->list, &new_cache->slab.list);
+        slab_chk++;
+    }
+
+    return new_cache;
+}
+
+void slab_init()
+{
+    if (!is_buddy_init)
+        return;
+
+    for (int i = 0; i < SLAB_POOL_SIZE; i++)
+        slab_cache_ptr[i] = slab_cache_new(slab_size_pool[i]);
+}
+
+char *slab_alloc(uint32_t sz)
+{
+    for (int i = 0; i < SLAB_POOL_SIZE; i++)
+        if (slab_size_pool[i] >= sz) {
+            SlabCache *curr_cache = slab_cache_ptr[i];
+            SlabCache *next_cache;
+            Slab *next_slab;
+
+            while (1)
+            {
+                next_slab = container_of(curr_cache->slab.list.next, Slab, list);
+                if (next_slab != &curr_cache->slab) {
+                    list_del(&next_slab->list);
+                    return next_slab;
+                }
+                
+                next_cache = container_of(curr_cache->cache_list.next, SlabCache, cache_list);
+                if (curr_cache == next_cache)
+                    break;
+                curr_cache = next_cache;
+            }
+
+            SlabCache *new_cache = slab_cache_new(slab_size_pool[i]);
+            list_add_tail(&new_cache->cache_list, &slab_cache_ptr[i]->cache_list);
+
+            next_slab = container_of(curr_cache->slab.list.next, Slab, list);
+            list_del(&next_slab->list);
+            return next_slab;
+        }
+    
+    return NULL;
+}
+
+int32_t slab_free(char *chk)
+{
+    for (int i = 0; i < SLAB_POOL_SIZE; i++) {
+        SlabCache *curr_cache = slab_cache_ptr[i];
+        SlabCache *next_cache;
+
+        while (1)
+        {
+            next_cache = container_of(curr_cache->cache_list.next, Slab, list);
+            if (curr_cache == next_cache)
+                break;
+
+            if (chk >= next_cache->start && chk < next_cache->end) {
+                Slab *tmp_slab = chk;
+                list_add_tail(&tmp_slab->list, &curr_cache->slab.list);
+                return 0;
+            }
+            curr_cache = next_cache;
+        }
+    }
+
+    return -1;
+}
+
+char* kmalloc(uint32_t sz)
+{
+    char *ret;
+    if ((ret = slab_alloc(sz)) != NULL)
+        return ret;
+
+    uint32_t pg_cnt = (sz + ((1 << PAGE_SHIFT) - 1)) >> PAGE_SHIFT;
+    return buddy_alloc(pg_cnt);
+}
+
+int32_t kfree(char *chk)
+{
+    if (slab_free(chk) == 0)
+        return 0;
+
+    return buddy_free(chk);
 }

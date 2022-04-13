@@ -79,8 +79,8 @@ void parse_dtb(char *dtb, void(*callback)(int,char*,char*,int))
         case FDT_BEGIN_NODE:
             level++;
             node_name = stru_block;
-            show_space(level);
-            printf("[ %s ] \r\n", node_name);
+            // show_space(level);
+            // printf("[ %s ] \r\n", node_name);
 
             stru_block = ALIGN_32(stru_block + strlen(stru_block));
             break;
@@ -95,13 +95,13 @@ void parse_dtb(char *dtb, void(*callback)(int,char*,char*,int))
             chr_prop_value = stru_block;
             prop_name = prop_name_base + nameoff;
 
-            show_space(level);
-            if (!strlen(chr_prop_value)) {
-                uint_prop_value = endian_xchg_32( *(uint32_t *) chr_prop_value );
-                printf("Property [ %s ]: 0x%x\r\n", prop_name, uint_prop_value);
-            } else {
-                printf("Property [ %s ]: %s\r\n", prop_name, chr_prop_value);
-            }
+            // show_space(level);
+            // if (!strlen(chr_prop_value)) {
+            //     uint_prop_value = endian_xchg_32( *(uint32_t *) chr_prop_value );
+            //     printf("Property [ %s ]: 0x%x\r\n", prop_name, uint_prop_value);
+            // } else {
+            //     printf("Property [ %s ]: %s\r\n", prop_name, chr_prop_value);
+            // }
             
             stru_block = ALIGN_32(stru_block + prop_len);
             break;

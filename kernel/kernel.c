@@ -40,6 +40,9 @@ void kernel()
     /* Mem init */
     page_init();
     buddy_init();
+    slab_init();
+
+    char *a = kmalloc(10);
 
     /* UART init */
     uart_init();
