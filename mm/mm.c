@@ -290,7 +290,7 @@ SlabCache* slab_cache_new(uint32_t sz)
     {
         LIST_INIT(slab_chk->list);
         list_add(&slab_chk->list, &new_cache->slab.list);
-        slab_chk++;
+        slab_chk = (char *) slab_chk + sz;
     }
 
     return new_cache;
@@ -310,7 +310,6 @@ char *slab_alloc(uint32_t sz)
     for (int i = 0; i < SLAB_POOL_SIZE; i++)
         if (slab_size_pool[i] >= sz) {
             SlabCache *curr_cache = slab_cache_ptr[i];
-            SlabCache *next_cache;
             Slab *next_slab;
 
             while (1)
@@ -321,10 +320,9 @@ char *slab_alloc(uint32_t sz)
                     goto _slab_alloc_ok;
                 }
                 
-                next_cache = container_of(curr_cache->cache_list.next, SlabCache, cache_list);
-                if (curr_cache == next_cache)
+                curr_cache = container_of(curr_cache->cache_list.next, SlabCache, cache_list);
+                if (curr_cache == slab_cache_ptr[i])
                     break;
-                curr_cache = next_cache;
             }
 
             #ifdef DEBUG_MM
@@ -350,7 +348,6 @@ int32_t slab_free(char *chk)
 {
     for (int i = 0; i < SLAB_POOL_SIZE; i++) {
         SlabCache *curr_cache = slab_cache_ptr[i];
-        SlabCache *prev_cache;
 
         while (1)
         {
@@ -363,9 +360,8 @@ int32_t slab_free(char *chk)
                 #endif /* DEBUG_MM */
                 return 0;
             }
-            prev_cache = curr_cache;
             curr_cache = container_of(curr_cache->cache_list.next, SlabCache, cache_list);
-            if (curr_cache == prev_cache)
+            if (curr_cache == slab_cache_ptr[i])
                 break;
         }
     }
