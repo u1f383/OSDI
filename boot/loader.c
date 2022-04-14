@@ -16,7 +16,7 @@ void reset(int tick);
 void cancel_reset();
 
 static char *kernel_addr =(char *) KERNEL_BASE_ADDR;
-extern uint64_t dtb_base;
+extern addr_t dtb_base;
 
 /* Reboot pi after watchdog timer expire */
 void reset(int tick)

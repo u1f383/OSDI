@@ -226,3 +226,9 @@ _irq_handler_wrapper:
 .global dtb_base
 dtb_base:
     .long 0
+    .long 0
+
+.global dtb_end
+dtb_end:
+    .long 0
+    .long 0

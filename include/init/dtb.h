@@ -34,6 +34,6 @@ typedef struct _Fdt_rsv_entry
 #define FDT_NOP        0x00000004
 #define FDT_END        0x00000009
 
-void parse_dtb(char *dtb, void (*func)());
+void parse_dtb(void (*func)());
 
 #endif /* _KERNEL_DTB_H_ */

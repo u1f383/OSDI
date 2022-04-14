@@ -3,11 +3,12 @@
 #include <types.h>
 #include <list.h>
 
-#define MM_PHYS_MEMORY_START 0
-#define MM_PHYS_MEMORY_END (1 * GB)
+static addr_t phys_mem_start = 0, \
+              phys_mem_end = 0x3B400000;
+#define MM_PHYS_MEMORY_START
 #define PAGE_SIZE (4 * KB)
 #define PAGE_SHIFT 12
-#define PFN_BASE_OFFSET (MM_PHYS_MEMORY_START >> PAGE_SHIFT)
+#define PFN_BASE_OFFSET (phys_mem_start >> PAGE_SHIFT)
 
 #define phys_to_pfn(_phys_addr) ((((addr_t) _phys_addr) >> PAGE_SHIFT) - PFN_BASE_OFFSET)
 #define pfn_to_phys(pfn) ( (pfn + PFN_BASE_OFFSET) << PAGE_SHIFT )
@@ -49,7 +50,7 @@ typedef struct _Slab {
     struct list_head list;
 } Slab;
 typedef struct _SlabCache {
-    uint16_t size;
+    uint32_t size;
     addr_t start;
     addr_t end;
     Slab slab;
@@ -64,6 +65,7 @@ void memory_reserve(uint64_t start, uint64_t end);
 
 char* buddy_alloc(uint32_t req_pgcnt);
 char* kmalloc(uint32_t sz);
+int32_t kfree(char *chk);
 int32_t buddy_free(char *chk);
 
 #endif /* _ARM_MM_H_ */

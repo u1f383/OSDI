@@ -12,6 +12,7 @@ CFLAGS = -Wall \
 		-ffreestanding \
 		-mgeneral-regs-only \
 		-g \
+		-DDEBUG_MM \
 		-Iinclude
 
 BUILD_DIR = build

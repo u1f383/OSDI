@@ -53,7 +53,8 @@ int strcpy(char *s1, const char *s2);
 int strlen(const char *s1);
 
 /* MEMORY OPERATION */
-#define ALIGN_32(ptr) ( (((uint64_t) ptr) + 3) & ~3 )
+#define ALIGN(x, a)	 (((x) + ((a) - 1)) & ~((a) - 1))
+#define PALIGN(p, a) ((void *)(ALIGN((unsigned long)(p), (a))))
 int memcmp(const char *dst, const char *src, uint32_t sz);
 void memcpy(char *dst, const char *src, uint32_t sz);
 void memset(char *s1, char c, uint32_t sz);

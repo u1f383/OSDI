@@ -11,6 +11,10 @@ typedef struct _RsvdMem {
 } RsvdMem;
 
 RsvdMem user_rsvd_memory[] = {
+    #define spin_table_start 0x0
+    #define spin_table_end   0x1000
+    { spin_table_start, spin_table_end },
+
     #define kern_start 0x80000
     #define kern_end   0x100000
     { kern_start, kern_end },
@@ -29,7 +33,6 @@ static bool is_buddy_init = 0;
 FreeArea *free_area[PAGE_ORDER_MAX+1];
 Page *mem_map;
 uint64_t gb_pgcnt;
-
 SlabCache *slab_cache_ptr[SLAB_POOL_SIZE];
 
 /**
@@ -55,7 +58,7 @@ static inline bool is_page_rsvd(Page *pg)
 
 void page_init()
 {
-    gb_pgcnt = (MM_PHYS_MEMORY_END - MM_PHYS_MEMORY_START) / PAGE_SIZE;
+    gb_pgcnt = (phys_mem_end - phys_mem_start) / PAGE_SIZE;
     mem_map = (Page *) startup_alloc(sizeof(Page) * gb_pgcnt);
 
     for (int i = 0; i <= PAGE_ORDER_MAX; i++)
@@ -71,7 +74,7 @@ void memory_reserve(uint64_t start, uint64_t end)
         return;
     
     start = _floor(start, PAGE_SHIFT);
-    end = _floor(end, PAGE_SHIFT);
+    end = _ceil(end, PAGE_SHIFT);
 
     Page *pg_iter = phys_to_page(start), \
          *pg_end = phys_to_page(end);
@@ -81,9 +84,9 @@ void memory_reserve(uint64_t start, uint64_t end)
         pg_iter->order = PAGE_ORDER_UND;
         pg_iter++;
     }
-    /* Last one */
-    pg_iter->flags = PAGE_FLAG_RSVD;
-    pg_iter->order = PAGE_ORDER_UND;
+    #ifdef DEBUG_MM
+        printf("[DEBUG] Reserve memory from 0x%x to 0x%x\r\n", start, end);
+    #endif /* DEBUG_MM */
 }
 
 static inline void del_fa(FreeArea *victim, int8_t order)
@@ -101,6 +104,7 @@ static inline void del_fa(FreeArea *victim, int8_t order)
 
 static inline void add_fa(FreeArea *fa, int8_t order)
 {
+    LIST_INIT(fa->list);
     if ((uint64_t) free_area[order] == FREEAREA_UND)
         free_area[order] = fa;
     else
@@ -155,6 +159,9 @@ void buddy_init()
 
 char* buddy_alloc(uint32_t req_pgcnt)
 {
+    #ifdef DEBUG_MM
+        printf("[DEBUG] Allocate from buddy\r\n");
+    #endif /* DEBUG_MM */
     req_pgcnt = ceiling_2(req_pgcnt);
     int32_t order = log_2(req_pgcnt);
 
@@ -167,8 +174,12 @@ char* buddy_alloc(uint32_t req_pgcnt)
         curr_order++;
     
     /* Out of memory */
-    if (curr_order > PAGE_ORDER_MAX)
+    if (curr_order > PAGE_ORDER_MAX) {
+        #ifdef DEBUG_MM
+            printf("[DEBUG] Out of memory with request page count 0x%x\r\n", req_pgcnt);
+        #endif /* DEBUG_MM */
         return NULL;
+    }
 
     char *ret = free_area[curr_order];
     del_fa(free_area[curr_order], curr_order);
@@ -178,6 +189,9 @@ char* buddy_alloc(uint32_t req_pgcnt)
     /* Need to split buddy */
     while (order < curr_order)
     {
+        #ifdef DEBUG_MM
+            printf("[DEBUG] No buddy 0x%x, split from order 0x%x\r\n", curr_order-1, curr_order);
+        #endif /* DEBUG_MM */
         curr_order--;
 
         Page *next_pg = pg + (1 << curr_order);
@@ -190,11 +204,17 @@ char* buddy_alloc(uint32_t req_pgcnt)
 
     pg->order = order;
     pg->flags = PAGE_FLAG_ALLOC;
+    #ifdef DEBUG_MM
+        printf("[DEBUG] Req order 0x%x, ret order 0x%x\r\n", order, curr_order);
+    #endif /* DEBUG_MM */
     return ret;
 }
 
 int32_t buddy_free(char *chk)
 {
+    #ifdef DEBUG_MM
+        printf("[DEBUG] Free to buddy\r\n");
+    #endif /* DEBUG_MM */
     Page *pg = phys_to_page(chk);
     if ( (pg->order == PAGE_ORDER_UND || pg->flags == PAGE_FLAG_RSVD)  || /* reserved memory */
          (pg->order == PAGE_ORDER_BODY || pg->flags == PAGE_FLAG_BODY) || /* body */
@@ -210,6 +230,9 @@ int32_t buddy_free(char *chk)
         if (cons_chk->order == pg->order &&
             cons_chk->flags == PAGE_FLAG_FREED)
         {
+            #ifdef DEBUG_MM
+                printf("[DEBUG] Consolidate with right buddy 0x%x, order 0x%x --> 0x%x\r\n", pg->order, pg->order+1);
+            #endif /* DEBUG_MM */
             del_fa(page_to_phys(cons_chk), pg->order);
 
             cons_chk->order = PAGE_ORDER_BODY;
@@ -229,6 +252,9 @@ int32_t buddy_free(char *chk)
         if (cons_chk->order == curr_order &&
             cons_chk->flags == PAGE_FLAG_FREED)
         {
+            #ifdef DEBUG_MM
+                printf("[DEBUG] Consolidate with left buddy, order 0x%x --> 0x%x\r\n", pg->order, pg->order+1);
+            #endif /* DEBUG_MM */
             del_fa(page_to_phys(cons_chk), curr_order);
 
             prev_cons_chk->order = PAGE_ORDER_BODY;
@@ -241,7 +267,7 @@ int32_t buddy_free(char *chk)
         }
         break;
     }
-
+    prev_cons_chk->flags = PAGE_FLAG_FREED;
     cons_fa = page_to_phys(prev_cons_chk);
     add_fa(cons_fa, curr_order);
 
@@ -292,7 +318,7 @@ char *slab_alloc(uint32_t sz)
                 next_slab = container_of(curr_cache->slab.list.next, Slab, list);
                 if (next_slab != &curr_cache->slab) {
                     list_del(&next_slab->list);
-                    return next_slab;
+                    goto _slab_alloc_ok;
                 }
                 
                 next_cache = container_of(curr_cache->cache_list.next, SlabCache, cache_list);
@@ -301,11 +327,19 @@ char *slab_alloc(uint32_t sz)
                 curr_cache = next_cache;
             }
 
+            #ifdef DEBUG_MM
+                printf("[DEBUG] Create new slab cache\r\n");
+            #endif /* DEBUG_MM */
             SlabCache *new_cache = slab_cache_new(slab_size_pool[i]);
             list_add_tail(&new_cache->cache_list, &slab_cache_ptr[i]->cache_list);
 
-            next_slab = container_of(curr_cache->slab.list.next, Slab, list);
+            next_slab = container_of(new_cache->slab.list.next, Slab, list);
             list_del(&next_slab->list);
+
+        _slab_alloc_ok:
+            #ifdef DEBUG_MM
+                printf("[DEBUG] Allocate from slab_cache with slab size 0x%x\r\n", slab_size_pool[i]);
+            #endif /* DEBUG_MM */
             return next_slab;
         }
     
@@ -316,23 +350,25 @@ int32_t slab_free(char *chk)
 {
     for (int i = 0; i < SLAB_POOL_SIZE; i++) {
         SlabCache *curr_cache = slab_cache_ptr[i];
-        SlabCache *next_cache;
+        SlabCache *prev_cache;
 
         while (1)
         {
-            next_cache = container_of(curr_cache->cache_list.next, Slab, list);
-            if (curr_cache == next_cache)
-                break;
-
-            if (chk >= next_cache->start && chk < next_cache->end) {
+            if (chk >= curr_cache->start && chk < curr_cache->end) {
                 Slab *tmp_slab = chk;
                 list_add_tail(&tmp_slab->list, &curr_cache->slab.list);
+
+                #ifdef DEBUG_MM
+                    printf("[DEBUG] Free to 0x%x slab\r\n", slab_size_pool[i]);
+                #endif /* DEBUG_MM */
                 return 0;
             }
-            curr_cache = next_cache;
+            prev_cache = curr_cache;
+            curr_cache = container_of(curr_cache->cache_list.next, SlabCache, cache_list);
+            if (curr_cache == prev_cache)
+                break;
         }
     }
-
     return -1;
 }
 
