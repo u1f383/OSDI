@@ -41,9 +41,8 @@ void usage()
 void foo()
 {
     while (1) {
-    // for (int i = 0; i < 10; i++) {
-        // printf("Thread id: %lu %d\n", get_current());
-        // delay(1000000);
+        printf("Thread id: %lu %d\r\n", get_current());
+        delay(0x100000);
         // schedule();
     }
 }
@@ -63,12 +62,12 @@ void kernel()
     slab_init();
 
     uart_eint();
-    main_thread_init();
-
     printf("boot_time: %x\r\n", boot_time);
 
-    // for (int i = 0; i < 3; i++)
-    // thread_create(foo, NULL);
+    main_thread_init();
+
+    for (int i = 0; i < 3; i++)
+        thread_create(foo, NULL);
 
     idle();
 

@@ -214,17 +214,19 @@ svc_handler:
 
 #define THREAD_NUM 8 /* also define in linux/sched.h */
 _irq_handler_wrapper:
-    sub sp, sp, 8
+    sub sp, sp, 16
     str x0, [sp]
     ldr x0, first_exception
     cbnz x0, _thread_save
 
     ldr x0, [sp]
-    add sp, sp, 8
+    add sp, sp, 16
     save_greg
     save_intr_reg
+
     mov x0, 0
-    str x0, [sp, #-8]!
+    str x0, [sp, #-16]!
+    
     b start_irq_handler
     
 _thread_save:
@@ -247,7 +249,7 @@ _thread_save:
 
     mov x2, x0
     ldr x0, [sp]
-    add sp, sp, 8
+    add sp, sp, 16
     stp x0, x1, [x2 ,16 * 0]
 
     mov x0, sp
@@ -258,7 +260,7 @@ _thread_save:
     stp x0, x1, [x2 ,16 * 16]
 
     mov x0, 1
-    str x0, [sp, #-8]!
+    str x0, [sp, #-16]!
 
     mov x0, 0
     ldr x1, =first_exception
@@ -272,7 +274,7 @@ start_irq_handler:
     bl update_timer
     bl enable_timer
 
-    ldr x0, [sp], #8
+    ldr x0, [sp, #16]!
     cbnz x0, _thread_restore
     
     load_intr_reg

@@ -51,7 +51,6 @@ void main_thread_init()
 
     write_sysreg(tpidr_el1, &thread_infos[0]);
     set_timer(thread_infos[0].time);
-    set_timer(3 * read_sysreg(cntfrq_el0));
     enable_timer();
 }
 
@@ -101,6 +100,7 @@ uint32_t thread_create(void(*func)(), void *arg)
 void idle()
 {
     while (1) {
+        delay(0x100000);
         printf("%p\r\n", get_current());
     }
 }

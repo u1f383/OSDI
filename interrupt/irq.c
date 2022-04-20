@@ -236,11 +236,9 @@ void irq_handler()
     uint32_t int_src = *(uint32_t *) CORE0_INTERRUPT_SRC;
     TaskEntry *te = NULL, *prev_te = NULL;
     
-    printf("CC\r\n");
     /* Timer handling - check if CNTPNSIRQ interrupt bit is set */
     if (int_src & 0b10)
     {
-        printf("AA\r\n");
         te = add_task(timer_intr_handler, NULL, 1);
         disable_timer();
     }
@@ -262,12 +260,11 @@ void irq_handler()
 
         /* Preemptive callback */
         enable_intr();
-        printf("BB\r\n");
         te->callback(te->arg);
 
         disable_intr();
         prev_te = te;
-        te = container_of(te->list.next, TaskEntry, list);
+        te_hdr = te = container_of(te->list.next, TaskEntry, list);
         del_task_slot(prev_te);
     }
 }
