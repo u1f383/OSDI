@@ -69,10 +69,10 @@ void memset(char *s1, char c, uint32_t sz)
 }
 
 __asm__(
-    ".global sleep\n"
-    "sleep:\n"
+    ".global delay\n"
+    "delay:\n"
     "subs x0, x0, #1\n"
-    "cbnz x0, sleep\n"
+    "cbnz x0, delay\n"
     "ret\n"
 );
 

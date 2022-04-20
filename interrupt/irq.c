@@ -1,7 +1,9 @@
+#include <linux/sched.h>
 #include <interrupt/irq.h>
 #include <gpio/uart.h>
 #include <types.h>
 #include <util.h>
+#include <lib/printf.h>
 
 #define TIME_JOB_NUM 0x30
 #define TASK_ENTRY_NUM 0x10
@@ -19,6 +21,7 @@ uint32_t tj_tail;
 TaskEntry task_entries[TASK_ENTRY_NUM];
 TaskEntry *te_hdr = NULL;
 uint32_t te_cnt = 0;
+bool first_exception = 1;
 
 static inline int is_time_job_fill()
 {
@@ -31,57 +34,81 @@ static inline int is_time_job_empty()
 }
 
 /* Enable timer for Arm core0 timer IRQ */
-static inline void enable_timer()
+void enable_timer()
 {
     *(uint32_t *) CORE0_TIMER_IRQ_CTRL = 2;
 }
 
-static inline void disable_timer()
+void disable_timer()
 {
     *(uint32_t *) CORE0_TIMER_IRQ_CTRL = 0;
 }
 
-static inline void disable_intr()
+void disable_intr()
 {
     __asm__("msr DAIFSet, 0xf");
 }
 
-static inline void enable_intr()
+void enable_intr()
 {
     __asm__("msr DAIFClr, 0xf");
 }
 
+void set_timer(uint32_t duration)
+{
+    write_sysreg(cntp_tval_el0, duration);
+}
+
+void update_timer()
+{
+    ThreadInfo *curr = get_current();
+    int32_t timer = (!is_time_job_empty() && time_jobs[0].duration < curr->time)
+                    ? time_jobs[0].duration : curr->time;
+    set_timer(timer);
+}
+
+uint32_t get_delta()
+{
+    ThreadInfo *curr = get_current();
+    uint32_t timer = (!is_time_job_empty() && time_jobs[0].duration < curr->time)
+                    ? time_jobs[0].duration : curr->time;
+    return timer;
+}
+
 void add_timer(void(*callback)(void*), void *arg, uint32_t duration)
 {
-    if (is_time_job_fill() || duration == 0)
-        return;
-    
-    disable_timer();
-
     uint32_t delta;
-    uint32_t frq = read_sysreg(cntfrq_el0);
-    uint32_t curr_tval = read_sysreg(cntp_tval_el0);
+    uint32_t curr_tval, frq;
+
+    curr_tval = read_sysreg(cntp_tval_el0);
+    disable_timer();
     
-    delta = is_time_job_empty() ? 0 : time_jobs[0].duration - curr_tval;
+    if (is_time_job_fill() || duration == 0) {
+        enable_timer();
+        return;
+    }
+    
+    frq = read_sysreg(cntfrq_el0);
+    delta = get_delta() - curr_tval;
     duration *= frq; /* Second to frequency */
 
     for (int i = 0; i < tj_tail; i++)
-        time_jobs[i].duration -= delta;
+        time_jobs[i].duration = (time_jobs[i].duration > delta) ? time_jobs[i].duration - delta : 0;
 
     if (tj_tail != 0 && duration < time_jobs[0].duration)
     {
         /* The time job is fastest */
         time_jobs[ tj_tail ] = time_jobs[0];
         time_jobs[0] = (TimeJob) { .arg=arg, .callback=callback, .duration=duration };
-        write_sysreg(cntp_tval_el0, duration);
     }
     else
     {
         time_jobs[ tj_tail ] = (TimeJob) { .arg=arg, .callback=callback, .duration=duration };
-        write_sysreg(cntp_tval_el0, time_jobs[0].duration);
     }
 
     tj_tail++;
+
+    update_timer();
     enable_timer();
 }
 
@@ -154,25 +181,33 @@ TaskEntry* add_task(void (*callback)(void*), void *arg, int32_t prio)
 
 void timer_intr_handler()
 {
+    ThreadInfo *curr_thread = get_current();
+    uint32_t delta = get_delta();
+    bool need_update = 0;
+    int i;
+
+    curr_thread->time -= delta;
+    if (curr_thread->time == 0) {
+        curr_thread->status = STOPPED;
+    }
+
     if (is_time_job_empty())
         return;
-
-    uint32_t delta = time_jobs[0].duration;
-    int i;
 
     /* Update rest time and call the callback function */
     for (i = 0; i < tj_tail; i++)
     {
-        time_jobs[i].duration -= delta;
-        while (time_jobs[i].duration == 0 && i < tj_tail)
+        while (time_jobs[i].duration <= delta && i < tj_tail)
         {
             time_jobs[i].callback(time_jobs[i].arg);
             time_jobs[i] = time_jobs[ --tj_tail ];
-            time_jobs[i].duration -= delta;
+
+            need_update = 1;
         }
+        time_jobs[i].duration -= delta;
     }
 
-    if (is_time_job_empty())
+    if (!need_update || is_time_job_empty())
         return;
 
     uint32_t min_idx = 0;
@@ -194,9 +229,6 @@ void timer_intr_handler()
         time_jobs[ min_idx ] = time_jobs[0];
         time_jobs[0] = tmp_tj;
     }
-
-    write_sysreg(cntp_tval_el0, time_jobs[0].duration);
-    enable_timer();
 }
 
 void irq_handler()
@@ -204,9 +236,11 @@ void irq_handler()
     uint32_t int_src = *(uint32_t *) CORE0_INTERRUPT_SRC;
     TaskEntry *te = NULL, *prev_te = NULL;
     
+    printf("CC\r\n");
     /* Timer handling - check if CNTPNSIRQ interrupt bit is set */
     if (int_src & 0b10)
     {
+        printf("AA\r\n");
         te = add_task(timer_intr_handler, NULL, 1);
         disable_timer();
     }
@@ -228,6 +262,7 @@ void irq_handler()
 
         /* Preemptive callback */
         enable_intr();
+        printf("BB\r\n");
         te->callback(te->arg);
 
         disable_intr();

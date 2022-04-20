@@ -49,6 +49,7 @@ int32_t strto(i, int64_t);    /* strtoi */
 #define tostr(_name_, _type_)                         \
     _name_##tostr(char *nptr, _type_ value, int base) \
     {                                                 \
+        char *_base_nptr = nptr;                      \
         if (value == 0)                               \
         {                                             \
             *nptr = '0';                              \
@@ -57,8 +58,9 @@ int32_t strto(i, int64_t);    /* strtoi */
         }                                             \
         if (value < 0)                                \
         {                                             \
-            *nptr++ = '-';                            \
+            *nptr = '-';                              \
             value *= -1;                              \
+            nptr++;                                   \
         }                                             \
                                                       \
         char buf[0x100];                              \
@@ -75,10 +77,10 @@ int32_t strto(i, int64_t);    /* strtoi */
                                                       \
         int i = 0;                                    \
         for (; i < idx; i++)                          \
-            *(nptr + i) = buf[idx - 1 - i];           \
-        *(nptr + i) = '\0';                           \
+            *nptr++ = buf[idx - 1 - i];               \
+        *nptr = '\0';                                 \
                                                       \
-        return i;                                     \
+        return nptr - _base_nptr;                     \
     }
 
 int tostr(lu, uint64_t); /* lutostr */
@@ -138,7 +140,7 @@ int vsprintf(char *buf, const char *fmt, va_list args)
             }
             else if (ch == 'p')
             {
-                uint64_t addr = (uint64_t)va_arg(args, void *);
+                uint64_t addr = va_arg(args, uint64_t);
                 buf += strcpy(buf, "0x");
                 buf += lutostr(buf, addr, 16);
             }

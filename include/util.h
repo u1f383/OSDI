@@ -90,6 +90,6 @@ int8_t log_2(uint64_t value);
 #define write_sysreg(reg, _val) ({ __asm__ volatile("msr " #reg ", %0" ::"rZ"(_val)); })
 
 /* OTHER HELPER */
-void sleep(int cycles);
+void delay(int cycles);
 
 #endif /* _UTIL_H_ */

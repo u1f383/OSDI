@@ -12,7 +12,6 @@ CFLAGS = -Wall \
 		-ffreestanding \
 		-mgeneral-regs-only \
 		-g \
-		-DDEBUG_MM \
 		-Iinclude
 
 BUILD_DIR = build
@@ -98,9 +97,9 @@ KERN_DEP_FILES = $(patsubst %,$(BUILD_DIR)/%.d,$(KERN_SRC_FILES))
 KERN_OBJ_FILES = $(patsubst %,$(BUILD_DIR)/%.o,$(KERN_SRC_FILES))
 -include KERN_DEP_FILES
 
-LIB_SRC_FILES = $(shell find . -name "*.c"  ! -path "./$(BOOT_DIR)/*"    \
-											! -path "./$(KERNEL_DIR)/*"  \
-											! -path "./$(SCRIPT_DIR)/*"  )
+LIB_SRC_FILES = $(shell find . -name "*.[cS]" ! -path "./$(BOOT_DIR)/*"    \
+											  ! -path "./$(KERNEL_DIR)/*"  \
+											  ! -path "./$(SCRIPT_DIR)/*"  )
 LIB_DEP_FILES = $(patsubst %,$(BUILD_DIR)/%.d,$(LIB_SRC_FILES))
 LIB_OBJ_FILES = $(patsubst %,$(BUILD_DIR)/%.o,$(LIB_SRC_FILES))
 -include LIB_DEP_FILES
@@ -110,6 +109,9 @@ BOOT_OBJ_FILES =  $(call FILTER,printf.c.o, $(LIB_OBJ_FILES))
 BOOT_OBJ_FILES += $(call FILTER,uart.c.o, $(LIB_OBJ_FILES))
 BOOT_OBJ_FILES += $(call FILTER,util.c.o, $(LIB_OBJ_FILES))
 BOOT_OBJ_FILES += $(call FILTER,irq.c.o, $(LIB_OBJ_FILES))
+BOOT_OBJ_FILES += $(call FILTER,sched.c.o, $(LIB_OBJ_FILES))
+BOOT_OBJ_FILES += $(call FILTER,sched.S.o, $(LIB_OBJ_FILES))
+BOOT_OBJ_FILES += $(call FILTER,mm.c.o, $(LIB_OBJ_FILES))
 
 test:
 	@echo $(LIB_OBJ_FILES)

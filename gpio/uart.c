@@ -61,10 +61,10 @@ void uart_init()
     
     /* Disable pull-up/down control because pins are always connected */
     set_value(*GPIO_GPPUD_REG, GPIO_GPPUD_Off, 0, sizeof(reg32));
-    sleep(150);
+    delay(150);
     /* Send the modification signal to GPIO14/15 */
     set_value(*GPIO_GPPUDCLK0_REG, 0b11, 14, 14 + 2);
-    sleep(150);
+    delay(150);
 
     /**
      * Remove control signal by writing gppud, and

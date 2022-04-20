@@ -1,5 +1,5 @@
-#ifndef _ARM_MM_H_
-#define _ARM_MM_H_
+#ifndef _LINUX_MM_H_
+#define _LINUX_MM_H_
 #include <types.h>
 #include <list.h>
 
@@ -43,7 +43,7 @@ typedef struct _FreeArea {
 static const uint32_t slab_size_pool[] = \
 {
     16, 32, 48, 96, 128, 256, 512, 1024,
-    2048, 3172, 4096, 8192, 16384, 32768, 65536
+    2048, 3072, 4096, 8192, 16384, 32768, 65536
 };
 #define SLAB_POOL_SIZE (sizeof(slab_size_pool) / sizeof(slab_size_pool[0]))
 typedef struct _Slab {

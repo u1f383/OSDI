@@ -1,7 +1,8 @@
-#include <arm/mm.h>
+#include <linux/mm.h>
 #include <util.h>
 #include <list.h>
 #include <types.h>
+#include <lib/printf.h>
 
 #define FREEAREA_UND 0xffffffff
 
@@ -21,7 +22,7 @@ RsvdMem user_rsvd_memory[] = {
 
     #define user_stack      0x100000
     #define user_stack_size 0x4000
-    { user_stack, user_stack + user_stack_size },
+    { user_stack - user_stack_size, user_stack },
 
     #define su_rsvd_base 0x104000
     #define su_rsvd_size 0xFC000
@@ -153,7 +154,6 @@ void buddy_init()
         if (pg_iter == pg_end)
             break;
     }
-
     is_buddy_init = 1;
 }
 
@@ -276,23 +276,22 @@ int32_t buddy_free(char *chk)
 
 SlabCache* slab_cache_new(uint32_t sz)
 {
-    SlabCache *new_cache = buddy_alloc(32);
+    SlabCache *new_cache = buddy_alloc(64);
     new_cache->size = sz;
     new_cache->start = ((char *) new_cache) + sizeof(SlabCache);
-    new_cache->end = ((char *) new_cache) + (32*PAGE_SIZE);
+    new_cache->end = ((char *) new_cache) + (64*PAGE_SIZE);
                         
     LIST_INIT(new_cache->slab.list);
     LIST_INIT(new_cache->cache_list);
-    new_cache->end -= ((32*PAGE_SIZE - sizeof(SlabCache)) % new_cache->size);
+    new_cache->end -= ((64*PAGE_SIZE - sizeof(SlabCache)) % new_cache->size);
 
     Slab *slab_chk = new_cache + 1;
     while (slab_chk < new_cache->end)
     {
         LIST_INIT(slab_chk->list);
-        list_add(&slab_chk->list, &new_cache->slab.list);
+        list_add_tail(&slab_chk->list, &new_cache->slab.list);
         slab_chk = (char *) slab_chk + sz;
     }
-
     return new_cache;
 }
 

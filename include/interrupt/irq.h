@@ -20,7 +20,12 @@ typedef struct _TaskEntry
 } TaskEntry;
 
 void add_timer(void (*callback)(void*), void *arg, uint32_t duration);
+void set_timer(uint32_t duration);
 TaskEntry* add_task(void (*callback)(void*), void *arg, int32_t prio);
 void irq_handler();
+void enable_intr();
+void disable_intr();
+void enable_timer();
+void disable_timer();
 
 #endif /* _KERNEL_IRQ_H_ */
