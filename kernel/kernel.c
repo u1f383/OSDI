@@ -69,10 +69,18 @@ void kernel()
     // for (int i = 0; i < 3; i++)
     // create_kern_task(foo, NULL);
 
-    char *program = cpio_find_file("rootfs//user_program");
+    uint64_t tmp;
+    asm volatile("mrs %0, cntkctl_el1" : "=r"(tmp));
+    tmp |= 1;
+    asm volatile("msr cntkctl_el1, %0" : : "r"(tmp));
+
+    char *tmp_program = cpio_find_file("syscall.img");
+    char *program = (char *) 0x8000000;
+    memcpy(program, tmp_program, 246920);
     create_user_task(program);
 
-    idle();
+    while(1);
+    // idle();
 
     // char cmd[0x20];
     // while (1)

@@ -2,7 +2,8 @@
 .section ".text.kern"
 
 .global _kernel, \
-        from_el1_to_el0
+        from_el1_to_el0, \
+        ret_from_fork
 
 _kernel:
     ldr x1, =dtb_base
@@ -65,6 +66,80 @@ from_el1_to_el0:
     msr spsr_el1, x0
 
     eret
+
+ret_from_fork:
+    msr elr_el1, x0
+    msr sp_el0, x1
+    mov x0, 0x0
+    msr spsr_el1, x0
+    mov x1, x8
+
+    eret
+
+.macro thread_save
+    mrs x0, tpidr_el1
+
+    stp x2, x3, [x0 ,16 * 1]
+    stp x4, x5, [x0 ,16 * 2]
+    stp x6, x7, [x0 ,16 * 3]
+    stp x8, x9, [x0 ,16 * 4]
+    stp x10, x11, [x0 ,16 * 5]
+    stp x12, x13, [x0 ,16 * 6]
+    stp x14, x15, [x0 ,16 * 7]
+    stp x16, x17, [x0 ,16 * 8]
+    stp x18, x19, [x0 ,16 * 9]
+    stp x20, x21, [x0 ,16 * 10]
+    stp x22, x23, [x0 ,16 * 11]
+    stp x24, x25, [x0 ,16 * 12]
+    stp x26, x27, [x0 ,16 * 13]
+    stp x28, fp, [x0 ,16 * 14]
+
+    # !! Need to prev save the x0 in the stack
+    mov x2, x0
+    ldr x0, [sp]
+    add sp, sp, 16
+    stp x0, x1, [x2 ,16 * 0]
+
+    mov x0, sp
+    stp lr, x0, [x2, 16 * 15]
+    
+    mrs x0, elr_el1
+    mrs x1, spsr_el1
+    stp x0, x1, [x2 ,16 * 16]
+
+    mrs x0, sp_el0
+    str x0, [x2 ,16 * 17]
+.endm
+
+.macro thread_restore
+    mrs x0, tpidr_el1
+    
+    ldp x1, x2, [x0 ,16 * 16]
+    msr elr_el1, x1
+    msr spsr_el1, x2
+
+    ldr x1, [x0 ,16 * 17]
+    msr sp_el0, x1
+
+    ldp x2, x3, [x0 ,16 * 1]
+    ldp x4, x5, [x0 ,16 * 2]
+    ldp x6, x7, [x0 ,16 * 3]
+    ldp x8, x9, [x0 ,16 * 4]
+    ldp x10, x11, [x0 ,16 * 5]
+    ldp x12, x13, [x0 ,16 * 6]
+    ldp x14, x15, [x0 ,16 * 7]
+    ldp x16, x17, [x0 ,16 * 8]
+    ldp x18, x19, [x0 ,16 * 9]
+    ldp x20, x21, [x0 ,16 * 10]
+    ldp x22, x23, [x0 ,16 * 11]
+    ldp x24, x25, [x0 ,16 * 12]
+    ldp x26, x27, [x0 ,16 * 13]
+    ldp x28, fp, [x0 ,16 * 14]
+    ldp lr, x1, [x0, 16 * 15]
+    mov sp, x1
+    
+    ldp x0, x1, [x0, 16 * 0]
+.endm
 
 # Save general registers to stack
 .macro save_greg
@@ -153,22 +228,10 @@ exception_handler_table:
 
 # -------------------------
 .align 7
-    save_greg
     # 8 - Lower exception level - synchronous event
-    mrs x0, esr_el1
-
-    # Get exception class (EC)
-    asr x1, x0, 26
-
-    # If SVC
-    cmp x1, 0x15
-    b.eq svc_handler
-
-    # Otherwise do nothing
-    bl dummy_handler
+    b svc_handler
 .align 7
     # 9 - Lower exception level - IRQ
-qq:
     b _irq_handler_wrapper
 .align 7
     # 10
@@ -193,34 +256,53 @@ qq:
 
 .align 7
 dummy_handler:
-    b dummy_handler
+    msr DAIFClr, 0xf
+owo:
+    b owo
 
 #define SVC_NUM 0x10
 svc_handler:
-    # Get instruction specific syndrome (ISS)
-    and x1, x0, ((1 << 24) - 1)
-    cmp x1, SVC_NUM
+    str x0, [sp, #-16]!
+    thread_save
+
+    mrs x0, esr_el1
+    # Get exception class (EC)
+    asr x1, x0, 26
+    
+    # If not SVC, do nothing
+    cmp x1, 0x15
+    b.ne dummy_handler
+
+    # Get syscall number
+    cmp x8, SVC_NUM
     b.ge dummy_handler
 
-    ldr x2, =svc_table
+    ldr x4, =svc_table
+
+    # load argument
+    mrs x0, tpidr_el1
+    ldp x0, x1, [x0, 16 * 0]
 
     # Get the correspoding svc handler
-    ldr x0, [x2, x1, lsl#3]
-    blr x0    
+    ldr x2, [x4, x8, lsl#3]
+    blr x2
 
-    load_greg
+    mrs x1, tpidr_el1
+    str x0, [x1, 16 * 0]
+
+    thread_restore
     eret
 
-
-#define THREAD_NUM 8 /* also define in linux/sched.h */
 _irq_handler_wrapper:
     sub sp, sp, 16
     str x0, [sp]
+    
     ldr x0, first_exception
-    cbnz x0, _thread_save
+    cbnz x0, irq_thread_save
 
     ldr x0, [sp]
     add sp, sp, 16
+
     save_greg
     save_intr_reg
 
@@ -229,35 +311,8 @@ _irq_handler_wrapper:
     
     b start_irq_handler
     
-_thread_save:
-    mrs x0, tpidr_el1
-
-    stp x2, x3, [x0 ,16 * 1]
-    stp x4, x5, [x0 ,16 * 2]
-    stp x6, x7, [x0 ,16 * 3]
-    stp x8, x9, [x0 ,16 * 4]
-    stp x10, x11, [x0 ,16 * 5]
-    stp x12, x13, [x0 ,16 * 6]
-    stp x14, x15, [x0 ,16 * 7]
-    stp x16, x17, [x0 ,16 * 8]
-    stp x18, x19, [x0 ,16 * 9]
-    stp x20, x21, [x0 ,16 * 10]
-    stp x22, x23, [x0 ,16 * 11]
-    stp x24, x25, [x0 ,16 * 12]
-    stp x26, x27, [x0 ,16 * 13]
-    stp x28, fp, [x0 ,16 * 14]
-
-    mov x2, x0
-    ldr x0, [sp]
-    add sp, sp, 16
-    stp x0, x1, [x2 ,16 * 0]
-
-    mov x0, sp
-    stp lr, x0, [x2, 16 * 15]
-    
-    mrs x0, elr_el1
-    mrs x1, spsr_el1
-    stp x0, x1, [x2 ,16 * 16]
+irq_thread_save:
+    thread_save
 
     mov x0, 1
     str x0, [sp, #-16]!
@@ -275,42 +330,19 @@ start_irq_handler:
     bl enable_timer
 
     ldr x0, [sp], #16
-    cbnz x0, _thread_restore
+    cbnz x0, irq_thread_restore
     
     load_intr_reg
     load_greg
     b end_irq_handler
 
-_thread_restore:
-    mrs x0, tpidr_el1
-    ldp x1, x2, [x0 ,16 * 16]
-
-    msr elr_el1, x1
-    msr spsr_el1, x2
-
+irq_thread_restore:
     ldr x1, =first_exception
     mov x2, 1
     str x2, [x1]
 
-    ldp x2, x3, [x0 ,16 * 1]
-    ldp x4, x5, [x0 ,16 * 2]
-    ldp x6, x7, [x0 ,16 * 3]
-    ldp x8, x9, [x0 ,16 * 4]
-    ldp x10, x11, [x0 ,16 * 5]
-    ldp x12, x13, [x0 ,16 * 6]
-    ldp x14, x15, [x0 ,16 * 7]
-    ldp x16, x17, [x0 ,16 * 8]
-    ldp x18, x19, [x0 ,16 * 9]
-    ldp x20, x21, [x0 ,16 * 10]
-    ldp x22, x23, [x0 ,16 * 11]
-    ldp x24, x25, [x0 ,16 * 12]
-    ldp x26, x27, [x0 ,16 * 13]
-    ldp x28, fp, [x0 ,16 * 14]
-    ldp lr, x1, [x0, 16 * 15]
-    mov sp, x1
-    
-    ldp x0, x1, [x0 ,16 * 0]
-    msr DAIFClr, 0xf
+    thread_restore
+
 end_irq_handler:
     eret
 

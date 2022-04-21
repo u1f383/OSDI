@@ -1,16 +1,20 @@
 #include <types.h>
 #include <interrupt/svc.h>
 #include <gpio/uart.h>
+#include <gpio/mailbox.h>
 #include <lib/printf.h>
+#include <linux/sched.h>
+#include <init/initramfs.h>
+#include <interrupt/irq.h>
 
-void getpid();
-int64_t uartread(char buf[], uint64_t size);
-int64_t uartwrite(const char buf[], uint64_t size);
+int getpid();
 int exec(const char *name, char *const argv[]);
 int fork();
-void exit(int status);
 int mbox_call(unsigned char ch, unsigned int *mbox);
+void exit(int16_t status);
 void kill(int pid);
+int64_t uartread(char buf[], uint64_t size);
+int64_t uartwrite(const char buf[], uint64_t size);
 
 uint64_t svc_table[SVC_NUM] =
 {
@@ -26,14 +30,14 @@ uint64_t svc_table[SVC_NUM] =
     0,
 };
 
-void getpid()
+int getpid()
 {
-
+    return current->pid;
 }
 
 int64_t uartread(char buf[], uint64_t size)
 {
-    if (size > 0x100)
+    if (size > 0x1800 || size == 0)
         return -1;
     
     uart_recv_num(buf, size);
@@ -42,7 +46,7 @@ int64_t uartread(char buf[], uint64_t size)
 
 int64_t uartwrite(const char buf[], uint64_t size)
 {
-    if (size > 0x100)
+    if (size > 0x1800 || size == 0)
         return -1;
     
     uart_send_num(buf, size);
@@ -51,27 +55,43 @@ int64_t uartwrite(const char buf[], uint64_t size)
 
 int exec(const char *name, char *const argv[])
 {
+    char *program = cpio_find_file(name);
+    if (program == NULL)
+        return -1;
+
     
 }
 
 int fork()
 {
-
+    return __fork();
 }
 
-void exit(int status)
+void exit(int16_t status)
 {
-
+    thread_release(current, status);
 }
 
 int mbox_call(unsigned char ch, unsigned int *mbox)
 {
-
+    // disable_timer();
+    return mailbox_call(ch, mbox);
 }
 
 void kill(int pid)
 {
+    TaskStruct *curr = rq;
+    TaskStruct *next = container_of(curr->list.next, TaskStruct, list);
     
+    while (next != rq) {
+        if (curr->pid == pid) {
+            thread_release(curr, EXIT_CODE_KILL);
+            break;
+        }
+
+        next = container_of(curr->list.next, TaskStruct, list);
+        curr = next;
+    }
 }
 
 void svc0_handler()

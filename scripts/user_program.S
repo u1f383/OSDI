@@ -2,6 +2,8 @@
 
 .global _start
 _start:
-    # svc 0
+    mov x0, 0xff0000
+    mov x1, 0x10
+    svc 2
 test:
     b test

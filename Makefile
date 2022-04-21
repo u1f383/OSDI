@@ -41,7 +41,6 @@ debug_kern:
 						-serial $(INTERFACE) \
 						-initrd initramfs.cpio \
 						-dtb bcm2710-rpi-3-b-plus.dtb \
-						-display none \
 						-S -s
 
 debug_boot:
@@ -63,8 +62,7 @@ run_kern:
 						-serial null \
 						-serial $(INTERFACE) \
 						-initrd initramfs.cpio \
-						-dtb bcm2710-rpi-3-b-plus.dtb \
-						-display none
+						-dtb bcm2710-rpi-3-b-plus.dtb
 
 run_boot:
 	qemu-system-aarch64 -M raspi3b \
