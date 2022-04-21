@@ -66,8 +66,11 @@ void kernel()
 
     main_thread_init();
 
-    for (int i = 0; i < 3; i++)
-        thread_create(foo, NULL);
+    // for (int i = 0; i < 3; i++)
+    // create_kern_task(foo, NULL);
+
+    char *program = cpio_find_file("rootfs//user_program");
+    create_user_task(program);
 
     idle();
 

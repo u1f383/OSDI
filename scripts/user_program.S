@@ -2,6 +2,6 @@
 
 .global _start
 _start:
-    svc 0
+    # svc 0
 test:
     b test

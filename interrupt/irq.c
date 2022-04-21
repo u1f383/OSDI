@@ -61,18 +61,15 @@ void set_timer(uint32_t duration)
 
 void update_timer()
 {
-    ThreadInfo *curr = get_current();
-    int32_t timer = (!is_time_job_empty() && time_jobs[0].duration < curr->time)
-                    ? time_jobs[0].duration : curr->time;
+    int32_t timer = (!is_time_job_empty() && time_jobs[0].duration < current->time)
+                    ? time_jobs[0].duration : current->time;
     set_timer(timer);
 }
 
 uint32_t get_delta()
 {
-    ThreadInfo *curr = get_current();
-    uint32_t timer = (!is_time_job_empty() && time_jobs[0].duration < curr->time)
-                    ? time_jobs[0].duration : curr->time;
-    return timer;
+    return (!is_time_job_empty() && time_jobs[0].duration < current->time)
+                    ? time_jobs[0].duration : current->time;
 }
 
 void add_timer(void(*callback)(void*), void *arg, uint32_t duration)
@@ -181,15 +178,13 @@ TaskEntry* add_task(void (*callback)(void*), void *arg, int32_t prio)
 
 void timer_intr_handler()
 {
-    ThreadInfo *curr_thread = get_current();
     uint32_t delta = get_delta();
     bool need_update = 0;
     int i;
 
-    curr_thread->time -= delta;
-    if (curr_thread->time == 0) {
-        curr_thread->status = STOPPED;
-    }
+    current->time -= delta;
+    if (current->time == 0)
+        current->status = STOPPED;
 
     if (is_time_job_empty())
         return;

@@ -52,14 +52,12 @@ from_el2_to_el1:
     msr elr_el2, lr
     eret
 
-#define user_stack 0x100000 /* also define in mm/mm.c */
 from_el1_to_el0:
     # Return to user program
     msr elr_el1, x0
     
     # Setup user program stack pointer
-    mov x0, user_stack
-    msr sp_el0, x0
+    msr sp_el0, x1
 
     # Set exception mode to EL0
     # and enable all interrupt (disable: 0x3c0)
@@ -170,6 +168,8 @@ exception_handler_table:
     bl dummy_handler
 .align 7
     # 9 - Lower exception level - IRQ
+qq:
+    b _irq_handler_wrapper
 .align 7
     # 10
     bl dummy_handler
@@ -274,7 +274,7 @@ start_irq_handler:
     bl update_timer
     bl enable_timer
 
-    ldr x0, [sp, #16]!
+    ldr x0, [sp], #16
     cbnz x0, _thread_restore
     
     load_intr_reg

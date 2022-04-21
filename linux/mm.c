@@ -20,12 +20,8 @@ RsvdMem user_rsvd_memory[] = {
     #define kern_end   0x100000
     { kern_start, kern_end },
 
-    #define user_stack      0x100000
-    #define user_stack_size 0x4000
-    { user_stack - user_stack_size, user_stack },
-
-    #define su_rsvd_base 0x104000
-    #define su_rsvd_size 0xFC000
+    #define su_rsvd_base 0x100000
+    #define su_rsvd_size 0x100000
     { su_rsvd_base, su_rsvd_base + su_rsvd_size },
 };
 

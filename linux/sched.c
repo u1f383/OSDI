@@ -1,4 +1,5 @@
 #include <linux/sched.h>
+#include <kernel/kernel.h>m
 #include <linux/mm.h>
 #include <interrupt/irq.h>
 #include <lib/printf.h>
@@ -6,51 +7,55 @@
 #include <types.h>
 
 /* Thread 0 is main thread */
-ThreadInfo thread_infos[ THREAD_NUM ] = {0};
-uint8_t thread_count = 0;
+TaskStruct tasks[ TASK_NUM ] = {0};
+uint8_t task_count = 0;
 
-uint8_t get_thread_count()
+static inline uint8_t get_task_count()
 {
-    return thread_count;
+    return task_count;
+}
+static inline bool is_task_full()
+{
+    return task_count == TASK_NUM;
 }
 
 void try_context_switch()
 {
-    ThreadInfo *curr = get_current();
+    TaskStruct *curr = get_current();
     if (curr->status == RUNNING)
         return;
 
     /* Context switch */
-    if (get_thread_count() != 0)
+    if (get_task_count() != 0)
         context_switch(&curr);
         
     curr->time = TIME_SLOT;
 }
 
-void context_switch(ThreadInfo **curr)
+void __switch_to(TaskStruct **curr)
 {
-    __switch_to(curr);
-}
-
-void __switch_to(ThreadInfo **curr)
-{
-    ThreadInfo *next = container_of((*curr)->list.next, ThreadInfo, list);
+    TaskStruct *next = container_of((*curr)->list.next, TaskStruct, list);
     next->status = RUNNING;
     write_sysreg(tpidr_el1, next);
 
     *curr = next;
 }
 
+void context_switch(TaskStruct **curr)
+{
+    __switch_to(curr);
+}
+
 void main_thread_init()
 {
-    thread_infos[0].status = RUNNING;
-    thread_infos[0].prio = 1;
-    thread_infos[0].time = TIME_SLOT;
-    LIST_INIT(thread_infos[0].list);
-    thread_count++;
+    tasks[0].status = RUNNING;
+    tasks[0].prio = 1;
+    tasks[0].time = TIME_SLOT;
+    LIST_INIT(tasks[0].list);
+    task_count++;
 
-    write_sysreg(tpidr_el1, &thread_infos[0]);
-    set_timer(thread_infos[0].time);
+    write_sysreg(tpidr_el1, &tasks[0]);
+    set_timer(tasks[0].time);
     enable_timer();
 }
 
@@ -72,28 +77,59 @@ void thread_trampoline(void(*func)(), void *arg)
     // thread_release();
 }
 
-uint32_t thread_create(void(*func)(), void *arg)
+uint32_t create_kern_task(void(*func)(), void *arg)
 {
-    if (thread_count == THREAD_NUM)
+    if (is_task_full())
         return 1;
 
     int i = 0;
-    for (; i < THREAD_NUM; i++)
-        if (thread_infos[i].status == EMPTY)
+    for (; i < TASK_NUM; i++)
+        if (tasks[i].status == EMPTY)
             break;
 
-    thread_infos[i].status = STOPPED;
-    thread_infos[i].prio = 2;
+    tasks[i].status = STOPPED;
+    tasks[i].prio = 2;
 
-    thread_infos[i].x0 = func;
-    thread_infos[i].x1 = arg;
-    thread_infos[i].pc = thread_trampoline;
-    thread_infos[i].sp = (uint64_t) kmalloc(THREAD_STACK_SIZE);
-    thread_infos[i].sp += THREAD_STACK_SIZE - 8;
-    thread_infos[i].fp = thread_infos[i].sp;
-    thread_infos[i].spsr_el1 = 0x20000005;
+    ThreadInfo *thread_info = &tasks[i].thread_info;
+    memset(thread_info, 0, sizeof(ThreadInfo));
 
-    list_add_tail(&thread_infos[i].list, &thread_infos[0].list);
+    thread_info->x0 = func;
+    thread_info->x1 = arg;
+    thread_info->pc = thread_trampoline;
+    thread_info->sp = (uint64_t) kmalloc(THREAD_STACK_SIZE);
+    thread_info->sp += THREAD_STACK_SIZE - 8;
+    thread_info->fp = thread_info->sp;
+    thread_info->spsr_el1 = 0x5;
+
+    list_add_tail(&tasks[i].list, &tasks[0].list);
+    return 0;
+}
+
+uint32_t create_user_task(void(*prog)())
+{
+    if (is_task_full())
+        return 1;
+
+    int i = 0;
+    for (; i < TASK_NUM; i++)
+        if (tasks[i].status == EMPTY)
+            break;
+
+    tasks[i].status = STOPPED;
+    tasks[i].prio = 2;
+
+    ThreadInfo *thread_info = &tasks[i].thread_info;
+    memset(thread_info, 0, sizeof(ThreadInfo));
+
+    thread_info->x0 = prog;
+    thread_info->pc = from_el1_to_el0;
+    thread_info->sp = (uint64_t) kmalloc(THREAD_STACK_SIZE);
+    thread_info->sp += THREAD_STACK_SIZE - 8;
+    thread_info->x1 = thread_info->sp;
+    thread_info->fp = thread_info->sp;
+    thread_info->spsr_el1 = 0x5;
+
+    list_add_tail(&tasks[i].list, &tasks[0].list);
     return 0;
 }
 

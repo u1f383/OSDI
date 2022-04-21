@@ -30,7 +30,7 @@ KERN_LINK_SCRIPT = $(SCRIPT_DIR)/linker_kern.ld
 # stdio / pty
 INTERFACE = stdio
 
-all: $(KERN_IMG) $(UBOOT_IMG)
+all: $(KERN_IMG)
 
 .PHONY: debug
 debug_kern:
