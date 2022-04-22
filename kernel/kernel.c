@@ -7,7 +7,6 @@
 #include <linux/sched.h>
 
 extern addr_t dtb_base, dtb_end;
-extern void from_el1_to_el0(uint64_t prog_ep);
 
 void init_cpio(char *node_name, char *prop_name, char *value, int len)
 {
@@ -64,18 +63,23 @@ void kernel()
     uart_eint();
     printf("boot_time: %x\r\n", boot_time);
 
-    main_thread_init();
-
-    // for (int i = 0; i < 3; i++)
-    // create_kern_task(foo, NULL);
-
     uint64_t tmp;
     asm volatile("mrs %0, cntkctl_el1" : "=r"(tmp));
     tmp |= 1;
     asm volatile("msr cntkctl_el1, %0" : : "r"(tmp));
 
+    main_thread_init();
+
+    // for (int i = 0; i < 3; i++)
+    // create_kern_task(foo, NULL);
+
+    char *new_cpio_start = kmalloc(247296);
+    memcpy(new_cpio_start, cpio_start, 247296);
+    cpio_start = new_cpio_start;
+
     char *tmp_program = cpio_find_file("syscall.img");
     char *program = (char *) 0x8000000;
+
     memcpy(program, tmp_program, 246920);
     create_user_task(program);
 
@@ -119,18 +123,6 @@ void kernel()
     //         strcpy(msg, tmp);
     //         add_timer(uart_sendstr, msg, timeout);
     //         kfree(msg);
-    //     } else if (!strcmp(cmd, "test_mm")) {
-    //         char *ptr[100];
-    //         for (int i = 0; i < 100; i++)
-    //             ptr[i] = kmalloc(i * 4*KB);
-    //         for (int i = 0; i < 100; i++)
-    //             kfree(ptr[i]);
-
-    //         char *slab_ptr[100];
-    //         for (int i = 0; i < 100; i++)
-    //             slab_ptr[i] = kmalloc(i * 0x10);
-    //         for (int i = 0; i < 100; i++)
-    //             kfree(slab_ptr[i]);
     //     }
     // }
 }

@@ -2,6 +2,11 @@
 #define _INTERRUPT_IRQ_H_
 #include <types.h>
 #include <list.h>
+#include <util.h>
+
+#define TIME_UNIT 0x1000
+// #define TIME_SLOT (0xa0000 / TIME_UNIT)
+#define TIME_SLOT 0x5
 
 #define INT_MAX_DEPTH 0x10
 #define CORE0_INTERRUPT_SRC 0x40000060
@@ -9,23 +14,34 @@
 
 #define TASK_MODE_LILO 0b0
 #define TASK_MODE_FILO 0b1
-#define TASK_MODE TASK_MODE_LILO
-typedef struct _TaskEntry
-{
-    int32_t prio;
-    void (*callback)(void*);
-    void *arg;
-    int running;
-    struct list_head list;
-} TaskEntry;
+#define TASK_MODE (TASK_MODE_LILO)
 
-void add_timer(void (*callback)(void*), void *arg, uint32_t duration);
-void set_timer(uint32_t duration);
-TaskEntry* add_task(void (*callback)(void*), void *arg, int32_t prio);
 void irq_handler();
-void enable_intr();
-void disable_intr();
-void enable_timer();
-void disable_timer();
+
+/* Enable / disable timer for Arm core0 timer IRQ */
+static inline void enable_timer()
+{
+    *(uint32_t *) CORE0_TIMER_IRQ_CTRL = 2;
+}
+
+static inline void disable_timer()
+{
+    *(uint32_t *) CORE0_TIMER_IRQ_CTRL = 0;
+}
+
+static inline void update_timer()
+{
+    write_sysreg(cntp_tval_el0, TIME_SLOT);
+}
+
+static inline void disable_intr()
+{
+    __asm__("msr DAIFSet, 0xf");
+}
+
+static inline void enable_intr()
+{
+    __asm__("msr DAIFClr, 0xf");
+}
 
 #endif /* _KERNEL_IRQ_H_ */

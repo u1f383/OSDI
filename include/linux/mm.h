@@ -21,6 +21,15 @@ static addr_t phys_mem_start = 0, \
 
 #define align_page(phys) ( (phys + ((1 << PAGE_SHIFT) - 1)) & ~((1 << PAGE_SHIFT) - 1) )
 
+
+#define spin_table_start 0x0
+#define spin_table_end   0x1000
+#define kern_start 0x80000
+#define kern_end   0x100000
+#define su_rsvd_base 0x100000
+#define su_rsvd_size 0x100000
+  
+
 typedef struct _Page {
     /* Used to check the page status */
     uint8_t flags;

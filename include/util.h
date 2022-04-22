@@ -87,6 +87,11 @@ int8_t log_2(uint64_t value);
     __asm__ volatile("mrs x0, " #reg \
                      : "=r"(_val));  \
                     _val; })
+#define read_normreg(reg) ({         \
+    uint64_t _val;                   \
+    __asm__ volatile("mov x0, " #reg \
+                     : "=r"(_val));  \
+                    _val; })
 
 #define write_sysreg(reg, _val) ({ __asm__ volatile("msr " #reg ", %0" ::"rZ"(_val)); })
 

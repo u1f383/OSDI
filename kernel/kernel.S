@@ -2,7 +2,6 @@
 .section ".text.kern"
 
 .global _kernel, \
-        from_el1_to_el0, \
         ret_from_fork
 
 _kernel:
@@ -53,97 +52,9 @@ from_el2_to_el1:
     msr elr_el2, lr
     eret
 
-from_el1_to_el0:
-    # Return to user program
-    msr elr_el1, x0
-    
-    # Setup user program stack pointer
-    msr sp_el0, x1
-
-    # Set exception mode to EL0
-    # and enable all interrupt (disable: 0x3c0)
-    mov x0, 0x0
-    msr spsr_el1, x0
-
-    eret
-
-ret_from_fork:
-    msr elr_el1, x0
-    msr sp_el0, x1
-    mov x0, 0x0
-    msr spsr_el1, x0
-    mov x1, x8
-
-    eret
-
-.macro thread_save
-    mrs x0, tpidr_el1
-
-    stp x2, x3, [x0 ,16 * 1]
-    stp x4, x5, [x0 ,16 * 2]
-    stp x6, x7, [x0 ,16 * 3]
-    stp x8, x9, [x0 ,16 * 4]
-    stp x10, x11, [x0 ,16 * 5]
-    stp x12, x13, [x0 ,16 * 6]
-    stp x14, x15, [x0 ,16 * 7]
-    stp x16, x17, [x0 ,16 * 8]
-    stp x18, x19, [x0 ,16 * 9]
-    stp x20, x21, [x0 ,16 * 10]
-    stp x22, x23, [x0 ,16 * 11]
-    stp x24, x25, [x0 ,16 * 12]
-    stp x26, x27, [x0 ,16 * 13]
-    stp x28, fp, [x0 ,16 * 14]
-
-    # !! Need to prev save the x0 in the stack
-    mov x2, x0
-    ldr x0, [sp]
-    add sp, sp, 16
-    stp x0, x1, [x2 ,16 * 0]
-
-    mov x0, sp
-    stp lr, x0, [x2, 16 * 15]
-    
-    mrs x0, elr_el1
-    mrs x1, spsr_el1
-    stp x0, x1, [x2 ,16 * 16]
-
-    mrs x0, sp_el0
-    str x0, [x2 ,16 * 17]
-.endm
-
-.macro thread_restore
-    mrs x0, tpidr_el1
-    
-    ldp x1, x2, [x0 ,16 * 16]
-    msr elr_el1, x1
-    msr spsr_el1, x2
-
-    ldr x1, [x0 ,16 * 17]
-    msr sp_el0, x1
-
-    ldp x2, x3, [x0 ,16 * 1]
-    ldp x4, x5, [x0 ,16 * 2]
-    ldp x6, x7, [x0 ,16 * 3]
-    ldp x8, x9, [x0 ,16 * 4]
-    ldp x10, x11, [x0 ,16 * 5]
-    ldp x12, x13, [x0 ,16 * 6]
-    ldp x14, x15, [x0 ,16 * 7]
-    ldp x16, x17, [x0 ,16 * 8]
-    ldp x18, x19, [x0 ,16 * 9]
-    ldp x20, x21, [x0 ,16 * 10]
-    ldp x22, x23, [x0 ,16 * 11]
-    ldp x24, x25, [x0 ,16 * 12]
-    ldp x26, x27, [x0 ,16 * 13]
-    ldp x28, fp, [x0 ,16 * 14]
-    ldp lr, x1, [x0, 16 * 15]
-    mov sp, x1
-    
-    ldp x0, x1, [x0, 16 * 0]
-.endm
-
 # Save general registers to stack
-.macro save_greg
-    sub sp, sp, 32 * 8
+.macro save_registers
+    sub sp, sp, 16 * 17
     stp x0, x1, [sp ,16 * 0]
     stp x2, x3, [sp ,16 * 1]
     stp x4, x5, [sp ,16 * 2]
@@ -159,18 +70,24 @@ ret_from_fork:
     stp x24, x25, [sp ,16 * 12]
     stp x26, x27, [sp ,16 * 13]
     stp x28, x29, [sp ,16 * 14]
-    str x30, [sp, 16 * 15]
-.endm
 
-.macro save_intr_reg
-    sub sp, sp, 4 * 8
     mrs x0, elr_el1
     mrs x1, spsr_el1
-    stp x0, x1, [sp ,16 * 15 + 8]
+    mrs x2, sp_el0
+    
+    stp x30, x0, [sp, 16 * 15]
+    stp x1, x2, [sp, 16 * 16]
 .endm
 
 # Load general registers from stack
-.macro load_greg
+.macro restore_registers
+    ldp x30, x0, [sp, 16 * 15]
+    ldp x1, x2, [sp, 16 * 16]
+
+    msr elr_el1, x0
+    msr spsr_el1, x1
+    msr sp_el0, x2
+    
     ldp x0, x1, [sp ,16 * 0]
     ldp x2, x3, [sp ,16 * 1]
     ldp x4, x5, [sp ,16 * 2]
@@ -186,15 +103,7 @@ ret_from_fork:
     ldp x24, x25, [sp ,16 * 12]
     ldp x26, x27, [sp ,16 * 13]
     ldp x28, x29, [sp ,16 * 14]
-    ldr x30, [sp, 16 * 15]
-    add sp, sp, 32 * 8
-.endm
-
-.macro load_intr_reg
-    ldp x0, x1, [sp ,16 * 15 + 8]
-    msr elr_el1, x0
-    msr spsr_el1, x1
-    add sp, sp, 4 * 8
+    add sp, sp, 16 * 17
 .endm
 
 # .align 7 means 2^7 alignment
@@ -262,11 +171,10 @@ owo:
 
 #define SVC_NUM 0x10
 svc_handler:
-    str x0, [sp, #-16]!
-    thread_save
+    save_registers
 
-    mrs x0, esr_el1
     # Get exception class (EC)
+    mrs x0, esr_el1
     asr x1, x0, 26
     
     # If not SVC, do nothing
@@ -277,73 +185,51 @@ svc_handler:
     cmp x8, SVC_NUM
     b.ge dummy_handler
 
-    ldr x4, =svc_table
-
     # load argument
-    mrs x0, tpidr_el1
-    ldp x0, x1, [x0, 16 * 0]
+    ldp x0, x1, [sp ,16 * 0]
 
     # Get the correspoding svc handler
+    ldr x4, =svc_table
     ldr x2, [x4, x8, lsl#3]
+    
+    # Trick to get trap frame
+    mov x8, sp
     blr x2
 
-    mrs x1, tpidr_el1
-    str x0, [x1, 16 * 0]
+    ldp x30, x1, [sp, 16 * 15]
+    ldp x2, x3, [sp, 16 * 16]
 
-    thread_restore
+    msr elr_el1, x1
+    msr spsr_el1, x2
+    msr sp_el0, x3
+    
+    # Need not load x0
+    ldr x1, [sp ,16 * 0 + 8]
+    ldp x2, x3, [sp ,16 * 1]
+    ldp x4, x5, [sp ,16 * 2]
+    ldp x6, x7, [sp ,16 * 3]
+    ldp x8, x9, [sp ,16 * 4]
+    ldp x10, x11, [sp ,16 * 5]
+    ldp x12, x13, [sp ,16 * 6]
+    ldp x14, x15, [sp ,16 * 7]
+    ldp x16, x17, [sp ,16 * 8]
+    ldp x18, x19, [sp ,16 * 9]
+    ldp x20, x21, [sp ,16 * 10]
+    ldp x22, x23, [sp ,16 * 11]
+    ldp x24, x25, [sp ,16 * 12]
+    ldp x26, x27, [sp ,16 * 13]
+    ldp x28, x29, [sp ,16 * 14]
+    add sp, sp, 16 * 17
     eret
 
 _irq_handler_wrapper:
-    sub sp, sp, 16
-    str x0, [sp]
-    
-    ldr x0, first_exception
-    cbnz x0, irq_thread_save
-
-    ldr x0, [sp]
-    add sp, sp, 16
-
-    save_greg
-    save_intr_reg
-
-    mov x0, 0
-    str x0, [sp, #-16]!
-    
-    b start_irq_handler
-    
-irq_thread_save:
-    thread_save
-
-    mov x0, 1
-    str x0, [sp, #-16]!
-
-    mov x0, 0
-    ldr x1, =first_exception
-    str x0, [x1]
-
-start_irq_handler:
+    save_registers
     bl irq_handler
-
-    msr DAIFSet, 0xf
-    bl try_context_switch
-    bl update_timer
-    bl enable_timer
-
-    ldr x0, [sp], #16
-    cbnz x0, irq_thread_restore
     
-    load_intr_reg
-    load_greg
-    b end_irq_handler
+    msr DAIFSet, 0xf
+    bl try_schedule
 
-irq_thread_restore:
-    ldr x1, =first_exception
-    mov x2, 1
-    str x2, [x1]
-
-    thread_restore
-
-end_irq_handler:
+    restore_registers
     eret
 
 .section ".data"

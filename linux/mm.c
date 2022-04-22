@@ -12,25 +12,18 @@ typedef struct _RsvdMem {
 } RsvdMem;
 
 RsvdMem user_rsvd_memory[] = {
-    #define spin_table_start 0x0
-    #define spin_table_end   0x1000
     { spin_table_start, spin_table_end },
-
-    #define kern_start 0x80000
-    #define kern_end   0x100000
     { kern_start, kern_end },
-
-    #define su_rsvd_base 0x100000
-    #define su_rsvd_size 0x100000
     { su_rsvd_base, su_rsvd_base + su_rsvd_size },
 };
-
-static bool is_buddy_init = 0;
 
 FreeArea *free_area[PAGE_ORDER_MAX+1];
 Page *mem_map;
 uint64_t gb_pgcnt;
 SlabCache *slab_cache_ptr[SLAB_POOL_SIZE];
+
+
+#define is_page_rsvd(pg) (pg->flags & PAGE_FLAG_RSVD)
 
 /**
  * ============ startup allocator ============
@@ -39,18 +32,13 @@ char *su_head = (char *) su_rsvd_base;
 char *su_tail = (char *) (su_rsvd_base + su_rsvd_size);
 char *startup_alloc(uint32_t sz)
 {
-    if (is_buddy_init || su_head + sz >= su_tail)
+    if (su_head + sz >= su_tail)
         return NULL;
 
     char *ret = su_head;
     su_head += sz;
 
     return ret;
-}
-
-static inline bool is_page_rsvd(Page *pg)
-{
-    return pg->flags & PAGE_FLAG_RSVD;
 }
 
 void page_init()
@@ -67,9 +55,6 @@ void page_init()
 
 void memory_reserve(uint64_t start, uint64_t end)
 {
-    if (is_buddy_init)
-        return;
-    
     start = _floor(start, PAGE_SHIFT);
     end = _ceil(end, PAGE_SHIFT);
 
@@ -150,7 +135,6 @@ void buddy_init()
         if (pg_iter == pg_end)
             break;
     }
-    is_buddy_init = 1;
 }
 
 char* buddy_alloc(uint32_t req_pgcnt)
@@ -293,9 +277,6 @@ SlabCache* slab_cache_new(uint32_t sz)
 
 void slab_init()
 {
-    if (!is_buddy_init)
-        return;
-
     for (int i = 0; i < SLAB_POOL_SIZE; i++)
         slab_cache_ptr[i] = slab_cache_new(slab_size_pool[i]);
 }
