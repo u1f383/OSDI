@@ -41,7 +41,7 @@ int64_t svc_uartread(char buf[], uint64_t size)
     if (size > 0x1800 || size == 0)
         return -1;
     
-    uart_recv_num(buf, size);
+    async_uart_recv_num(buf, size);
     return size;
 }
 
@@ -50,7 +50,7 @@ int64_t svc_uartwrite(const char buf[], uint64_t size)
     if (size > 0x1800 || size == 0)
         return -1;
     
-    uart_send_num(buf, size);
+    async_uart_send_num(buf, size);
     return size;
 }
 

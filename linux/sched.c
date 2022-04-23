@@ -89,7 +89,10 @@ int32_t __fork(void *trap_frame)
     task->thread_info.x20 = task->user_stack + usp_offset;
 
     rq_len++;
+    
+    disable_intr();
     list_add_tail(&task->list, &rq);
+    enable_intr();
 
     tf->x0 = task->pid;
     return task->pid;
@@ -118,7 +121,6 @@ void schedule()
         next = container_of(next->list.next, TaskStruct, list);
 
     update_timer();
-    enable_timer();
     switch_to(current, next);
 }
 
@@ -130,7 +132,6 @@ void try_schedule()
         current->time = TIME_SLOT;
     }
     update_timer();
-    enable_timer();
 }
 
 void main_thread_init()
@@ -147,7 +148,6 @@ void main_thread_init()
 
     write_sysreg(tpidr_el1, main_task);
     update_timer();
-    enable_timer();
 }
 
 void thread_release(TaskStruct *target, int16_t ec)
@@ -159,6 +159,10 @@ void thread_release(TaskStruct *target, int16_t ec)
     target->status = EXITED;
     target->exit_code = ec;
 
+    TaskStruct *next = container_of(current->list.next, TaskStruct, list);
+    while (&next->list == &rq || next == current)
+        next = container_of(next->list.next, TaskStruct, list);
+
     list_del(&target->list);
     LIST_INIT(target->list);
     list_add_tail(&target->list, &eq);
@@ -166,8 +170,10 @@ void thread_release(TaskStruct *target, int16_t ec)
     rq_len--;
     eq_len++;
 
-    if (target == current)
-        schedule();
+    if (target == current) {
+        update_timer();
+        switch_to(target, next);
+    }
 }
 
 void thread_trampoline(void(*func)(), void *arg)

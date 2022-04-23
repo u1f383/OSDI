@@ -194,7 +194,11 @@ svc_handler:
     
     # Trick to get trap frame
     mov x8, sp
+
+    # Enable interrupt
+    msr DAIFClr, 0xf
     blr x2
+    msr DAIFSet, 0xf
 
     ldp x30, x1, [sp, 16 * 15]
     ldp x2, x3, [sp, 16 * 16]

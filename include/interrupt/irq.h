@@ -6,7 +6,7 @@
 
 #define TIME_UNIT 0x1000
 // #define TIME_SLOT (0xa0000 / TIME_UNIT)
-#define TIME_SLOT 0x5
+#define TIME_SLOT 0x1
 
 #define INT_MAX_DEPTH 0x10
 #define CORE0_INTERRUPT_SRC 0x40000060
@@ -31,7 +31,8 @@ static inline void disable_timer()
 
 static inline void update_timer()
 {
-    write_sysreg(cntp_tval_el0, TIME_SLOT);
+    write_sysreg(cntp_tval_el0, TIME_UNIT);
+    enable_timer();
 }
 
 static inline void disable_intr()

@@ -207,3 +207,31 @@ void async_uart_cmd(char *ptr)
     }
     *ptr = '\0';
 }
+
+void async_uart_recv_num(char *buf, int num)
+{
+    while (num)
+    {
+        if (is_rx_empty())
+            continue;
+        
+        *buf = uart_rx[ uart_rx_tail ];
+        uart_rx_tail = (uart_rx_tail+1) % UART_BUF_SIZE;
+        num--;
+    }
+}
+
+void async_uart_send_num(char *buf, int num)
+{
+    while (num)
+    {
+        if (is_tx_fill())
+            continue;
+        uart_tx[ uart_tx_head ] = *buf++;
+        uart_tx_head = (uart_tx_head+1) % UART_BUF_SIZE;
+        num--;
+    }
+
+    set_value(aux_regs->mu_ier, aux_regs->mu_ier | 0b10,
+                AUXMUIER_Enable_receive_interrupts_BIT, AUXMUIER_RESERVED_BIT);
+}
