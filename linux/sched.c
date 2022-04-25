@@ -5,43 +5,6 @@
 #include <util.h>
 #include <types.h>
 
-typedef struct _TrapFrame {
-        uint64_t x0;
-        uint64_t x1;
-        uint64_t x2;
-        uint64_t x3;
-        uint64_t x4;
-        uint64_t x5;
-        uint64_t x6;
-        uint64_t x7;
-        uint64_t x8;
-        uint64_t x9;
-        uint64_t x10;
-        uint64_t x11;
-        uint64_t x12;
-        uint64_t x13;
-        uint64_t x14;
-        uint64_t x15;
-        uint64_t x16;
-        uint64_t x17;
-        uint64_t x18;
-        uint64_t x19;
-        uint64_t x20;
-        uint64_t x21;
-        uint64_t x22;
-        uint64_t x23;
-        uint64_t x24;
-        uint64_t x25;
-        uint64_t x26;
-        uint64_t x27;
-        uint64_t x28;
-        uint64_t x29;
-        uint64_t x30;
-        uint64_t elr_el1;
-        uint64_t spsr_el1;
-        uint64_t sp_el0;
-} TrapFrame;
-
 /* Thread 0 is main thread */
 TaskStruct *main_task;
 
@@ -61,6 +24,24 @@ TaskStruct *new_task()
     task->time = 1;
     LIST_INIT(task->list);
     return task;
+}
+
+void sigctx_restore(void *trap_frame)
+{
+    memcpy(trap_frame, current->signal_ctx->tf, sizeof(TrapFrame));
+}
+
+void sigctx_update(void *trap_frame, void (*handler)())
+{
+    TrapFrame *tf = trap_frame;
+    SignalCtx *signal_ctx = new_signal_ctx(tf);
+    
+    signal_ctx->user_stack = kmalloc(THREAD_STACK_SIZE);
+    current->signal_ctx = signal_ctx;
+    
+    tf->x30 = call_sigreturn;
+    tf->elr_el1 = handler;
+    tf->sp_el0 = signal_ctx->user_stack + THREAD_STACK_SIZE - 0x8;
 }
 
 int32_t __fork(void *trap_frame)
@@ -159,6 +140,19 @@ void thread_release(TaskStruct *target, int16_t ec)
     target->status = EXITED;
     target->exit_code = ec;
 
+    disable_intr();
+
+    if (current->signal != NULL)
+    {
+        Signal *iter = current->signal;
+        Signal *next;
+        do {
+            next = container_of(iter->list.next, Signal, list);
+            kfree(iter);
+            iter = next;
+        } while (iter != next);
+    }
+
     TaskStruct *next = container_of(current->list.next, TaskStruct, list);
     while (&next->list == &rq || next == current)
         next = container_of(next->list.next, TaskStruct, list);
@@ -169,6 +163,8 @@ void thread_release(TaskStruct *target, int16_t ec)
     
     rq_len--;
     eq_len++;
+
+    enable_intr();
 
     if (target == current) {
         update_timer();

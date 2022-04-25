@@ -1,12 +1,50 @@
-#ifndef _LINUX_SCHED_
-#define _LINUX_SCHED_
+#ifndef _LINUX_SCHED_H_
+#define _LINUX_SCHED_H_
 
 #include <types.h>
 #include <list.h>
 #include <interrupt/irq.h>
+#include <linux/signal.h>
 
 #define THREAD_STACK_SIZE 0x2000
 #define current get_current()
+
+typedef struct _TrapFrame {
+        uint64_t x0;
+        uint64_t x1;
+        uint64_t x2;
+        uint64_t x3;
+        uint64_t x4;
+        uint64_t x5;
+        uint64_t x6;
+        uint64_t x7;
+        uint64_t x8;
+        uint64_t x9;
+        uint64_t x10;
+        uint64_t x11;
+        uint64_t x12;
+        uint64_t x13;
+        uint64_t x14;
+        uint64_t x15;
+        uint64_t x16;
+        uint64_t x17;
+        uint64_t x18;
+        uint64_t x19;
+        uint64_t x20;
+        uint64_t x21;
+        uint64_t x22;
+        uint64_t x23;
+        uint64_t x24;
+        uint64_t x25;
+        uint64_t x26;
+        uint64_t x27;
+        uint64_t x28;
+        uint64_t x29;
+        uint64_t x30;
+        uint64_t elr_el1;
+        uint64_t spsr_el1;
+        uint64_t sp_el0;
+} TrapFrame;
 
 typedef struct _ThreadInfo {
     uint64_t x19;
@@ -40,6 +78,8 @@ typedef struct _TaskStruct {
     addr_t user_stack;
     addr_t kern_stack;
     struct list_head list;
+    Signal *signal;
+    SignalCtx *signal_ctx;
 } TaskStruct;
 #define EXIT_CODE_OK   1
 #define EXIT_CODE_KILL 2
@@ -57,11 +97,13 @@ int32_t __exec(void *trap_frame, void(*prog)(), char *const argv[]);
 int32_t __fork(void *trap_frame);
 TaskStruct *get_current();
 void try_schedule();
+void schedule();
 void idle();
 void kill_zombies();
 void switch_to(TaskStruct *curr, TaskStruct *next);
 void main_thread_init();
 void thread_release(TaskStruct *curr, int16_t ec);
+void call_sigreturn();
 
 uint32_t create_kern_task(void(*prog)(), void *arg);
 uint32_t create_user_task(void(*prog)());
@@ -70,5 +112,6 @@ void thread_trampoline(void(*func)(void *), void *arg);
 void __thread_trampoline();
 void from_el1_to_el0();
 void fork_handler();
+void sigctx_update(void *trap_frame, void (*handler)());
 
-#endif /* _LINUX_SCHED_ */
+#endif /* _LINUX_SCHED_H_ */

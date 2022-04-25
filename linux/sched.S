@@ -72,3 +72,8 @@ fork_handler:
     mov x0, 0x0
     msr spsr_el1, x0
     eret
+
+.global call_sigreturn
+call_sigreturn:
+    mov x8, 0xa
+    svc 0

@@ -5,6 +5,8 @@
 #include <gpio/mailbox.h>
 #include <lib/printf.h>
 #include <linux/sched.h>
+#include <linux/signal.h>
+#include <linux/mm.h>
 #include <init/initramfs.h>
 
 int svc_getpid();
@@ -13,8 +15,11 @@ int svc_fork();
 int svc_mbox_call(unsigned char ch, unsigned int *mbox);
 void svc_exit(int16_t status);
 void svc_kill(int pid);
+void svc_signal(int SIGNAL, void (*handler)());
+void svc_sigkill(int pid, int SIGNAL);
 int64_t svc_uartread(char buf[], uint64_t size);
 int64_t svc_uartwrite(const char buf[], uint64_t size);
+void svc_sigreturn();
 void svc_test();
 
 uint64_t svc_table[SVC_NUM] =
@@ -27,9 +32,55 @@ uint64_t svc_table[SVC_NUM] =
     svc_exit,
     svc_mbox_call,
     svc_kill,
+    svc_signal,
+    svc_sigkill,
+    svc_sigreturn,
     svc_test,
     0,
 };
+
+void svc_sigreturn()
+{
+    void *trap_frame = read_normreg(x8);
+    sigctx_restore(trap_frame);
+
+    disable_intr();
+    kfree(current->signal_ctx->tf);
+    kfree(current->signal_ctx->user_stack);
+    kfree(current->signal_ctx);
+    current->signal_ctx = NULL;
+    enable_intr();
+}
+
+void svc_signal(int SIGNAL, void (*handler)())
+{
+    Signal *signal = new_signal(SIGNAL, handler);
+    
+    if (current->signal == NULL)
+        current->signal = signal;
+    else {
+        disable_intr();
+        list_add(&signal->list, &current->signal->list);
+        enable_intr();
+    }
+}
+
+void svc_sigkill(int pid, int SIGNAL)
+{
+    if (current->signal == NULL) {
+        default_sighand[SIGNAL - 1](pid);
+    } else {
+        Signal *iter = current->signal;
+        do {
+            if (iter->signo == SIGNAL) {
+                void *trap_frame = read_normreg(x8);
+                sigctx_update(trap_frame, iter->handler);
+                break;
+            }
+            iter = container_of(iter->list.next, Signal, list);
+        } while (iter != current->signal);
+    }
+}
 
 int svc_getpid()
 {
@@ -82,37 +133,7 @@ int svc_mbox_call(unsigned char ch, unsigned int *mbox)
 
 void svc_kill(int pid)
 {
-    TaskStruct *first, *curr;
-
-    /* Traverse run queue */
-    if (!is_rq_empty()) {
-        first = container_of(rq.next, TaskStruct, list);
-        curr = first;
-        
-        do {
-            if (curr->pid == pid) {
-                thread_release(curr, EXIT_CODE_KILL);
-                return;
-            }
-
-            curr = container_of(curr->list.next, TaskStruct, list);
-        } while (curr != first);
-    }
-
-    /* Traverse wait queue */
-    if (!is_wq_empty()) {
-        first = container_of(wq.next, TaskStruct, list);
-        curr = first;
-        
-        do {
-            if (curr->pid == pid) {
-                thread_release(curr, EXIT_CODE_KILL);
-                return;
-            }
-
-            curr = container_of(curr->list.next, TaskStruct, list);
-        } while (curr != first);
-    }
+    sigkill_handler(pid);
 }
 
 void svc_test()

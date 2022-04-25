@@ -39,10 +39,10 @@ void usage()
 
 void foo()
 {
-    while (1) {
-        printf("Thread id: %lu %d\r\n", get_current());
-        delay(0x100000);
-        // schedule();
+    for (int i = 0; i < 10; i++) {
+        printf("Thread id: 0x%lx %d\n", current, i);
+        delay(1000000);
+        schedule();
     }
 }
 
@@ -70,8 +70,8 @@ void kernel()
 
     main_thread_init();
 
-    // for (int i = 0; i < 3; i++)
-    // create_kern_task(foo, NULL);
+    for (int i = 0; i < 3; i++)
+        create_kern_task(foo, NULL);
 
     char *new_cpio_start = kmalloc(247296);
     memcpy(new_cpio_start, cpio_start, 247296);
