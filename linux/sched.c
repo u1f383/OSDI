@@ -142,17 +142,6 @@ void thread_release(TaskStruct *target, int16_t ec)
 
     disable_intr();
 
-    if (current->signal != NULL)
-    {
-        Signal *iter = current->signal;
-        Signal *next;
-        do {
-            next = container_of(iter->list.next, Signal, list);
-            kfree(iter);
-            iter = next;
-        } while (iter != next);
-    }
-
     TaskStruct *next = container_of(current->list.next, TaskStruct, list);
     while (&next->list == &rq || next == current)
         next = container_of(next->list.next, TaskStruct, list);
@@ -239,10 +228,47 @@ uint32_t create_user_task(void(*prog)())
     return 0;
 }
 
+void kill_zombies()
+{
+    if (is_eq_empty())
+        return;
+
+    disable_intr();
+
+    TaskStruct *iter = container_of(eq.next, TaskStruct, list);
+    TaskStruct *prev;
+
+    while (eq_len)
+    {
+        if (iter->signal != NULL)
+        {
+            Signal *sig_iter = iter->signal;
+            Signal *sig_next;
+            do {
+                sig_next = container_of(sig_iter->list.next, Signal, list);
+                kfree(sig_iter);
+                sig_iter = sig_next;
+            } while (sig_iter != sig_next);
+        }
+
+        prev = iter;
+        iter = container_of(iter->list.next, TaskStruct, list);
+
+        list_del(&prev->list);
+        if (prev->user_stack != NULL)
+            kfree(prev->user_stack);
+        kfree(prev->kern_stack);
+        kfree(prev);
+        eq_len--;
+    }
+
+    enable_intr();
+}
+
 void idle()
 {
     while (1) {
-        delay(0x100000);
-        printf("%p\r\n", get_current());
+        kill_zombies();
+        schedule();
     }
 }

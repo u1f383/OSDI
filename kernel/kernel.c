@@ -83,8 +83,7 @@ void kernel()
     memcpy(program, tmp_program, 246920);
     create_user_task(program);
 
-    while(1);
-    // idle();
+    idle();
 
     // char cmd[0x20];
     // while (1)
