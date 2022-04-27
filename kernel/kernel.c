@@ -40,7 +40,7 @@ void usage()
 void foo()
 {
     for (int i = 0; i < 10; i++) {
-        printf("Thread id: 0x%lx %d\n", current, i);
+        printf("Thread id: 0x%lx %d\r\n", current, i);
         delay(1000000);
         schedule();
     }
@@ -69,6 +69,7 @@ void kernel()
     asm volatile("msr cntkctl_el1, %0" : : "r"(tmp));
 
     main_thread_init();
+    enable_intr();
 
     for (int i = 0; i < 3; i++)
         create_kern_task(foo, NULL);

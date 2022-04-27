@@ -1,5 +1,8 @@
 .global switch_to
 switch_to:
+    mrs x2, DAIF
+    msr DAIFSet, 0xf
+
     stp x19, x20, [x0, 16 * 0]
     stp x21, x22, [x0, 16 * 1]
     stp x23, x24, [x0, 16 * 2]
@@ -18,6 +21,8 @@ switch_to:
     ldr x9, [x1, 16 * 6]
     mov sp,  x9
     msr tpidr_el1, x1
+    
+    msr DAIF, x2
     ret
 
 .global get_current

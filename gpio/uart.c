@@ -1,9 +1,10 @@
 #include <gpio/uart.h>
 #include <gpio/gpio.h>
 #include <interrupt/irq.h>
+#include <linux/sched.h>
 #include <util.h>
 
-#define UART_BUF_SIZE 0x100
+#define UART_BUF_SIZE 0x400
 
 AuxRegs *aux_regs;
 char uart_rx[ UART_BUF_SIZE ];
@@ -21,7 +22,7 @@ static inline int is_tx_empty()
 static inline int is_tx_fill()
 {
     return uart_tx_head == uart_tx_tail-1 ||
-           uart_tx_head == uart_tx_tail - UART_BUF_SIZE + 1;
+           ((uart_tx_head == 1) && (uart_tx_tail == UART_BUF_SIZE - 1));
 }
 
 static inline int is_rx_empty()
@@ -32,7 +33,7 @@ static inline int is_rx_empty()
 static inline int is_rx_fill()
 {
     return uart_rx_head == uart_rx_tail-1 ||
-           uart_rx_head == uart_rx_tail - UART_BUF_SIZE + 1;
+           ((uart_rx_head == 1) && (uart_rx_tail == UART_BUF_SIZE - 1));
 }
 
 void uart_init()
@@ -80,9 +81,7 @@ void uart_eint()
     uint32_t *int_reg_irqs1 = (uint32_t *) ARM_INT_IRQs1_REG;
     *int_reg_irqs1 |= (1 << 29);
     
-    /* Enable recv interrupt */
-    set_value(aux_regs->mu_ier, 1, AUXMUIER_Enable_receive_interrupts_BIT,
-                                    AUXMUIER_Enable_transmit_interrupts_BIT);
+    enable_recv_intr();
 }
 
 void uart_intr_handler(reg32 orig_ier)
@@ -227,11 +226,12 @@ void async_uart_send_num(char *buf, int num)
     {
         if (is_tx_fill())
             continue;
+
         uart_tx[ uart_tx_head ] = *buf++;
         uart_tx_head = (uart_tx_head+1) % UART_BUF_SIZE;
         num--;
     }
 
     set_value(aux_regs->mu_ier, aux_regs->mu_ier | 0b10,
-                AUXMUIER_Enable_receive_interrupts_BIT, AUXMUIER_RESERVED_BIT);
+            AUXMUIER_Enable_receive_interrupts_BIT, AUXMUIER_RESERVED_BIT);
 }

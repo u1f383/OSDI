@@ -139,6 +139,8 @@ void buddy_init()
 
 char* buddy_alloc(uint32_t req_pgcnt)
 {
+    static bool buddy_lock = 0;
+
     #ifdef DEBUG_MM
         printf("[DEBUG] Allocate from buddy\r\n");
     #endif /* DEBUG_MM */
@@ -147,6 +149,9 @@ char* buddy_alloc(uint32_t req_pgcnt)
 
     if (order > PAGE_ORDER_MAX)
         return NULL;
+
+    while (buddy_lock);
+    buddy_lock = 1;
 
     int32_t curr_order = order;
     while ( curr_order <= PAGE_ORDER_MAX && \
@@ -158,6 +163,7 @@ char* buddy_alloc(uint32_t req_pgcnt)
         #ifdef DEBUG_MM
             printf("[DEBUG] Out of memory with request page count 0x%x\r\n", req_pgcnt);
         #endif /* DEBUG_MM */
+        buddy_lock = 0;
         return NULL;
     }
 
@@ -187,6 +193,8 @@ char* buddy_alloc(uint32_t req_pgcnt)
     #ifdef DEBUG_MM
         printf("[DEBUG] Req order 0x%x, ret order 0x%x\r\n", order, curr_order);
     #endif /* DEBUG_MM */
+    
+    buddy_lock = 0;
     return ret;
 }
 
@@ -283,6 +291,11 @@ void slab_init()
 
 char *slab_alloc(uint32_t sz)
 {
+    static bool slab_lock = 0;
+
+    while (slab_lock);
+    slab_lock = 1;
+
     for (int i = 0; i < SLAB_POOL_SIZE; i++)
         if (slab_size_pool[i] >= sz) {
             SlabCache *curr_cache = slab_cache_ptr[i];
@@ -314,9 +327,12 @@ char *slab_alloc(uint32_t sz)
             #ifdef DEBUG_MM
                 printf("[DEBUG] Allocate from slab_cache with slab size 0x%x\r\n", slab_size_pool[i]);
             #endif /* DEBUG_MM */
+            
+            slab_lock = 0;
             return next_slab;
         }
     
+    slab_lock = 0;
     return NULL;
 }
 

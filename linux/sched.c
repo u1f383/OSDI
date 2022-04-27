@@ -96,8 +96,10 @@ int32_t __exec(void *trap_frame, void(*prog)(), char *const argv[])
 
 void schedule()
 {
-    TaskStruct *next = container_of(current->list.next, TaskStruct, list);
+    if (get_rq_count() == 1)
+        return;
 
+    TaskStruct *next = container_of(current->list.next, TaskStruct, list);
     while (&next->list == &rq || next == current)
         next = container_of(next->list.next, TaskStruct, list);
 
@@ -107,9 +109,8 @@ void schedule()
 
 void try_schedule()
 {
-    if (current->time == 0) {
-        if (get_rq_count() > 1)
-            schedule();
+    if (current != NULL && current->time == 0) {
+        schedule();
         current->time = TIME_SLOT;
     }
     update_timer();
@@ -123,6 +124,7 @@ void main_thread_init()
     main_task->prio = 1;
     main_task->user_stack = 0;
     main_task->kern_stack = kern_end;
+    LIST_INIT(main_task->list);
     
     rq_len++;
     list_add(&main_task->list, rq.next);
@@ -153,11 +155,12 @@ void thread_release(TaskStruct *target, int16_t ec)
     rq_len--;
     eq_len++;
 
-    enable_intr();
-
     if (target == current) {
         update_timer();
+        enable_intr();
         switch_to(target, next);
+    } else {
+        enable_intr();
     }
 }
 
@@ -169,7 +172,6 @@ void thread_trampoline(void(*func)(), void *arg)
 
 uint32_t create_kern_task(void(*func)(), void *arg)
 {
-    disable_intr();
 
     TaskStruct *task = new_task();
     ThreadInfo *thread_info = &task->thread_info;
@@ -190,16 +192,16 @@ uint32_t create_kern_task(void(*func)(), void *arg)
     thread_info->lr = __thread_trampoline;
     
     rq_len++;
-    list_add_tail(&task->list, &rq);
 
+    disable_intr();
+    list_add_tail(&task->list, &rq);
     enable_intr();
+
     return 0;
 }
 
 uint32_t create_user_task(void(*prog)())
 {
-    disable_intr();
-
     TaskStruct *task = new_task();
     ThreadInfo *thread_info = &task->thread_info;
 
@@ -222,9 +224,11 @@ uint32_t create_user_task(void(*prog)())
     thread_info->lr = from_el1_to_el0;
 
     rq_len++;
+    
+    disable_intr();
     list_add_tail(&task->list, &rq);
-
     enable_intr();
+
     return 0;
 }
 

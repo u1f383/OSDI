@@ -42,4 +42,29 @@ static inline void disable_uart()
 }
 
 
+static inline void enable_recv_intr()
+{
+    set_value(aux_regs->mu_ier, aux_regs->mu_ier | 1,
+            AUXMUIER_Enable_receive_interrupts_BIT, AUXMUIER_RESERVED_BIT);    
+}
+
+static inline void disable_recv_intr()
+{
+    set_value(aux_regs->mu_ier, aux_regs->mu_ier & ~1,
+            AUXMUIER_Enable_receive_interrupts_BIT, AUXMUIER_RESERVED_BIT);    
+}
+
+static inline void enable_send_intr()
+{
+    set_value(aux_regs->mu_ier, aux_regs->mu_ier | 0b10,
+            AUXMUIER_Enable_receive_interrupts_BIT, AUXMUIER_RESERVED_BIT);    
+}
+
+static inline void disable_send_intr()
+{
+    set_value(aux_regs->mu_ier, aux_regs->mu_ier & ~0b10,
+            AUXMUIER_Enable_receive_interrupts_BIT, AUXMUIER_RESERVED_BIT);    
+}
+
+
 #endif /* _GPIO_UART_H_ */

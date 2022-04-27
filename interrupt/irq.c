@@ -60,10 +60,10 @@ BottomHalfJob *new_bhj(void (*callback)(void*), void *arg, int32_t prio)
 
 void add_timer(void(*callback)(void*), void *arg, uint32_t second)
 {
-    disable_timer();
+    disable_intr();
     
     if (second == 0) { /* Invalid */
-        enable_timer();
+        enable_intr();
         return;
     }
     
@@ -83,7 +83,8 @@ void add_timer(void(*callback)(void*), void *arg, uint32_t second)
         else
             list_add_tail(&time_job->list, &time_jobs_hdr);
     }
-    enable_timer();
+
+    enable_intr();
 }
 
 BottomHalfJob *add_bhj(void (*callback)(void*), void *arg, int32_t prio)
@@ -149,6 +150,7 @@ void timer_intr_handler()
         }
         iter = next;
     }
+    
     return;
 }
 
