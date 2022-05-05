@@ -21,6 +21,7 @@ Signal *new_signal(int SIGNAL, void (*handler)());
 SignalCtx *new_signal_ctx(void *tf);
 void ignore(int pid);
 void sigkill_handler(int pid);
+void try_signal_handle(void *trap_frame);
 
 extern void (*default_sighand[])(int);
 

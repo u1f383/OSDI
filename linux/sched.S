@@ -1,6 +1,6 @@
 .global switch_to
 switch_to:
-    mrs x2, DAIF
+    # mrs x2, DAIF
     msr DAIFSet, 0xf
 
     stp x19, x20, [x0, 16 * 0]
@@ -22,7 +22,8 @@ switch_to:
     mov sp,  x9
     msr tpidr_el1, x1
     
-    msr DAIF, x2
+    msr DAIFClr, 0xf
+    # msr DAIF, x2
     ret
 
 .global get_current
@@ -56,7 +57,6 @@ fork_handler:
     msr elr_el1, x19
     msr sp_el0, x20
 
-    mov x0, 0
     ldr x1, [sp ,16 * 0 + 8]
     ldp x2, x3, [sp ,16 * 1]
     ldp x4, x5, [sp ,16 * 2]

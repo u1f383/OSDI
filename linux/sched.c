@@ -1,5 +1,6 @@
 #include <linux/sched.h>
 #include <linux/mm.h>
+#include <linux/signal.h>
 #include <interrupt/irq.h>
 #include <lib/printf.h>
 #include <util.h>
@@ -68,10 +69,23 @@ int32_t __fork(void *trap_frame)
     task->thread_info.fp = task->kern_stack + ufp_offset;
     task->thread_info.x19 = tf->x30;
     task->thread_info.x20 = task->user_stack + usp_offset;
-
     rq_len++;
-    
+
     disable_intr();
+    if (current->signal != NULL)
+    {
+        Signal *iter = current->signal;
+        do {
+            Signal *new_sig = new_signal(iter->signo, iter->handler);
+            if (task->signal == NULL) {
+                task->signal = new_sig;
+            } else {
+                list_add_tail(&new_sig->list, &task->signal);
+            }
+            iter = container_of(iter->list.next, Signal, list);
+        } while (iter != current->signal);
+    }
+
     list_add_tail(&task->list, &rq);
     enable_intr();
 
@@ -82,7 +96,7 @@ int32_t __fork(void *trap_frame)
 int32_t __exec(void *trap_frame, void(*prog)(), char *const argv[])
 {
     TrapFrame *tf = trap_frame;
-    char *syscall_img = (char *) 0x8000000;
+    char *syscall_img = (char *) kmalloc(246920);
     memcpy(syscall_img, prog, 246920);
 
     current->pid = _currpid++;
@@ -172,7 +186,6 @@ void thread_trampoline(void(*func)(), void *arg)
 
 uint32_t create_kern_task(void(*func)(), void *arg)
 {
-
     TaskStruct *task = new_task();
     ThreadInfo *thread_info = &task->thread_info;
 

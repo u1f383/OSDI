@@ -67,18 +67,33 @@ void svc_signal(int SIGNAL, void (*handler)())
 
 void svc_sigkill(int pid, int SIGNAL)
 {
-    if (current->signal == NULL) {
-        default_sighand[SIGNAL - 1](pid);
-    } else {
-        Signal *iter = current->signal;
+     TaskStruct *first, *curr = NULL;
+    /* Traverse run queue */
+    if (!is_rq_empty()) {
+        first = container_of(rq.next, TaskStruct, list);
+        curr = first;
         do {
-            if (iter->signo == SIGNAL) {
-                void *trap_frame = read_normreg(x8);
-                sigctx_update(trap_frame, iter->handler);
-                break;
+            if (curr->pid == pid) {
+                if (curr->signal_queue == 0)
+                    curr->signal_queue = SIGNAL;
+                return;
             }
-            iter = container_of(iter->list.next, Signal, list);
-        } while (iter != current->signal);
+            curr = container_of(curr->list.next, TaskStruct, list);
+        } while (curr != first);
+    }
+
+    /* Traverse wait queue */
+    if (curr != NULL && !is_wq_empty()) {
+        first = container_of(wq.next, TaskStruct, list);
+        curr = first;
+        do {
+            if (curr->pid == pid) {
+                if (curr->signal_queue == 0)
+                    curr->signal_queue = SIGNAL;
+                return;
+            }
+            curr = container_of(curr->list.next, TaskStruct, list);
+        } while (curr != first);
     }
 }
 
@@ -92,7 +107,9 @@ int64_t svc_uartread(char buf[], uint64_t size)
     if (size > 0x1800 || size == 0)
         return -1;
     
-    async_uart_recv_num(buf, size);
+    if (async_uart_recv_num(buf, size) == 0)
+        return 0;
+        
     return size;
 }
 
@@ -101,7 +118,9 @@ int64_t svc_uartwrite(const char buf[], uint64_t size)
     if (size > 0x1800 || size == 0)
         return -1;
     
-    async_uart_send_num(buf, size);
+    if (async_uart_send_num(buf, size) == 0)
+        return 0;
+
     return size;
 }
 

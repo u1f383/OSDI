@@ -31,8 +31,8 @@ void uart_recvline(char *ptr);
 void uart_cmd(char *ptr);
 
 void async_uart_cmd(char *ptr);
-void async_uart_recv_num(char *buf, int num);
-void async_uart_send_num(char *buf, int num);
+int async_uart_recv_num(char *buf, int num);
+int async_uart_send_num(char *buf, int num);
 void async_uart_sendchr(char c);
 void async_uart_sendstr(const char *str);
 

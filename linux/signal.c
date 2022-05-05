@@ -75,3 +75,26 @@ void ignore(int pid)
 {
     return;
 }
+
+void try_signal_handle(void *trap_frame)
+{
+    if (current->signal_queue)
+    {
+        uint32_t signo = current->signal_queue;
+        current->signal_queue = 0;
+        
+        if (current->signal == NULL) {
+            default_sighand[signo - 1](current->pid);
+        } else {
+            Signal *iter = current->signal;
+            do {
+                if (iter->signo == signo) {
+                    sigctx_update(trap_frame, iter->handler);
+                    return;
+                }
+                iter = container_of(iter->list.next, Signal, list);
+            } while (iter != current->signal);
+            default_sighand[signo - 1](current->pid);
+        }
+    }
+}

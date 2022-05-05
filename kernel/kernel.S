@@ -233,6 +233,9 @@ _irq_handler_wrapper:
     msr DAIFSet, 0xf
     bl try_schedule
 
+    mov x0, sp
+    bl try_signal_handle
+
     restore_registers
     eret
 

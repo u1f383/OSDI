@@ -22,7 +22,7 @@ static inline int is_tx_empty()
 static inline int is_tx_fill()
 {
     return uart_tx_head == uart_tx_tail-1 ||
-           ((uart_tx_head == 1) && (uart_tx_tail == UART_BUF_SIZE - 1));
+           ((uart_tx_head == 0) && (uart_tx_tail == UART_BUF_SIZE - 1));
 }
 
 static inline int is_rx_empty()
@@ -33,7 +33,7 @@ static inline int is_rx_empty()
 static inline int is_rx_fill()
 {
     return uart_rx_head == uart_rx_tail-1 ||
-           ((uart_rx_head == 1) && (uart_rx_tail == UART_BUF_SIZE - 1));
+           ((uart_rx_head == 0) && (uart_rx_tail == UART_BUF_SIZE - 1));
 }
 
 void uart_init()
@@ -207,7 +207,7 @@ void async_uart_cmd(char *ptr)
     *ptr = '\0';
 }
 
-void async_uart_recv_num(char *buf, int num)
+int async_uart_recv_num(char *buf, int num)
 {
     while (num)
     {
@@ -218,9 +218,10 @@ void async_uart_recv_num(char *buf, int num)
         uart_rx_tail = (uart_rx_tail+1) % UART_BUF_SIZE;
         num--;
     }
+    return 1;
 }
 
-void async_uart_send_num(char *buf, int num)
+int async_uart_send_num(char *buf, int num)
 {
     while (num)
     {
@@ -234,4 +235,5 @@ void async_uart_send_num(char *buf, int num)
 
     set_value(aux_regs->mu_ier, aux_regs->mu_ier | 0b10,
             AUXMUIER_Enable_receive_interrupts_BIT, AUXMUIER_RESERVED_BIT);
+    return 1;
 }

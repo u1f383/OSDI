@@ -80,6 +80,7 @@ typedef struct _TaskStruct {
     struct list_head list;
     Signal *signal;
     SignalCtx *signal_ctx;
+    uint8_t signal_queue;
 } TaskStruct;
 #define EXIT_CODE_OK   1
 #define EXIT_CODE_KILL 2

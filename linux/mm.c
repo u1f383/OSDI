@@ -150,8 +150,8 @@ char* buddy_alloc(uint32_t req_pgcnt)
     if (order > PAGE_ORDER_MAX)
         return NULL;
 
-    while (buddy_lock);
-    buddy_lock = 1;
+    // while (buddy_lock);
+    // buddy_lock = 1;
 
     int32_t curr_order = order;
     while ( curr_order <= PAGE_ORDER_MAX && \
@@ -293,8 +293,8 @@ char *slab_alloc(uint32_t sz)
 {
     static bool slab_lock = 0;
 
-    while (slab_lock);
-    slab_lock = 1;
+    // while (slab_lock);
+    // slab_lock = 1;
 
     for (int i = 0; i < SLAB_POOL_SIZE; i++)
         if (slab_size_pool[i] >= sz) {

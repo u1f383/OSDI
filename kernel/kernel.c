@@ -74,12 +74,8 @@ void kernel()
     for (int i = 0; i < 3; i++)
         create_kern_task(foo, NULL);
 
-    char *new_cpio_start = kmalloc(247296);
-    memcpy(new_cpio_start, cpio_start, 247296);
-    cpio_start = new_cpio_start;
-
     char *tmp_program = cpio_find_file("syscall.img");
-    char *program = (char *) 0x8000000;
+    char *program = (char *) kmalloc(246920);
 
     memcpy(program, tmp_program, 246920);
     create_user_task(program);

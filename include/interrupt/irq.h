@@ -4,7 +4,7 @@
 #include <list.h>
 #include <util.h>
 
-#define TIME_UNIT 0x1000
+#define TIME_UNIT 0x10000
 // #define TIME_SLOT (0xa0000 / TIME_UNIT)
 #define TIME_SLOT 0x1
 
