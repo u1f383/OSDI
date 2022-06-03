@@ -1,20 +1,9 @@
 #ifndef _TXRX_TXRX_H_
 #define _TXRX_TXRX_H_
 
+#include <types.h>
+
 /**
-@ Transmission Protocol
-
-@@ Packet Format
-1. id (4 bytes): the # of data
-2. status (2 byte):
-    - FIN (1): finish
-    - PED (2): pending
-    - END (3): send end
-    - OK  (4): only set by loader, means it receives the correct data 
-3. checksum (4 byte)
-4. size (2 bytes): data size
-5. data (1 ~ 1024)
-
 @@ Transmission Flow
 A is server, B is client
 1. A ---<magic number 0x54875487>--> B
@@ -37,6 +26,18 @@ A is server, B is client
 #define FAILED_STR "\xef\xbe\xad\xde"
 #define FAILED  0xdeadbeef
 
+/** Transmission Protocol
+ * Packet Format
+ * 1. id (4 bytes): the # of data
+ * 2. status (2 byte):
+ *     - FIN (1): finish
+ *     - PED (2): pending
+ *     - END (3): send end
+ *     - OK  (4): only set by loader, means it receives the correct data 
+ * 3. checksum (4 byte)
+ * 4. size (2 bytes): data size
+ * 5. data (1 ~ 1024)
+ */
 typedef struct _Packet
 {
     uint32_t id;
@@ -55,9 +56,6 @@ typedef struct _Packet
 #define is_pending(packet) (((Packet *)packet)->status & PED)
 #define is_finished(packet) (((Packet *)packet)->status & FIN)
 #define is_ok(packet) (((Packet *)packet)->status & OK)
-
-Packet *new_packet();
-void release_packet(Packet *packet);
 
 static inline uint8_t calc_checksum(const unsigned char *data, uint32_t sz)
 {

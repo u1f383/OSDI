@@ -6,9 +6,7 @@ _start:
     ldr x1, =dtb_base
     str x0, [x1]
 
-    # In the beginning, we need to move
-    # our kernel to other space
-
+    # Kernel migration
     ldr x0, =_boot_base
     
     mov x1, x0

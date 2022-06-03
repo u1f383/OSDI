@@ -1,22 +1,36 @@
-#include <linux/sched.h>
-#include <linux/mm.h>
-#include <linux/signal.h>
-#include <interrupt/irq.h>
-#include <lib/printf.h>
+#include <sched.h>
+#include <mm.h>
+#include <signal.h>
+#include <irq.h>
+#include <printf.h>
 #include <util.h>
 #include <types.h>
+#include <initramfs.h>
+
+static inline void update_timer()
+{
+    write_sysreg(cntp_tval_el0, TIME_UNIT);
+    enable_timer();
+}
 
 /* Thread 0 is main thread */
 TaskStruct *main_task;
+TaskQueue rq, eq;
 
-struct list_head rq = LIST_HEAD_INIT(rq), \
-                 wq = LIST_HEAD_INIT(wq), \
-                 eq = LIST_HEAD_INIT(eq);
-uint8_t rq_len = 0, \
-        wq_len = 0, \
-        eq_len = 0;
+static uint64_t _currpid = 1;
 
-uint64_t _currpid = 1;
+void task_queue_init()
+{
+    /**
+     * Because run queue is used in schedule(),
+     * we will disable the interrupt instead of locking the rq
+     */
+    rq.list = LIST_HEAD_INIT(rq.list);
+    rq.len = rq.lock = 0;
+
+    eq.list = LIST_HEAD_INIT(eq.list);
+    eq.len = eq.lock = 0;
+}
 
 TaskStruct *new_task()
 {
@@ -27,98 +41,22 @@ TaskStruct *new_task()
     return task;
 }
 
-void sigctx_restore(void *trap_frame)
-{
-    memcpy(trap_frame, current->signal_ctx->tf, sizeof(TrapFrame));
-}
-
-void sigctx_update(void *trap_frame, void (*handler)())
-{
-    TrapFrame *tf = trap_frame;
-    SignalCtx *signal_ctx = new_signal_ctx(tf);
-    
-    signal_ctx->user_stack = kmalloc(THREAD_STACK_SIZE);
-    current->signal_ctx = signal_ctx;
-    
-    tf->x30 = call_sigreturn;
-    tf->elr_el1 = handler;
-    tf->sp_el0 = signal_ctx->user_stack + THREAD_STACK_SIZE - 0x8;
-}
-
-int32_t __fork(void *trap_frame)
-{
-    TrapFrame *tf = trap_frame;
-    TaskStruct *task = new_task();
-
-    task->pid = _currpid++;
-    task->prio = current->prio;
-    task->status = RUNNING;
-
-    int64_t usp_offset = tf->sp_el0 - current->user_stack;
-    int64_t ufp_offset = tf->x29 - current->user_stack;
-
-    task->user_stack = (uint64_t) kmalloc(THREAD_STACK_SIZE);
-    task->kern_stack = (uint64_t) kmalloc(THREAD_STACK_SIZE);
-
-    memcpy(task->user_stack, current->user_stack, THREAD_STACK_SIZE);
-    memcpy(task->kern_stack, current->kern_stack, THREAD_STACK_SIZE);
-
-    int64_t tf_offset = (uint64_t) tf - current->kern_stack;
-    task->thread_info.lr = fork_handler;
-    task->thread_info.sp = task->kern_stack + tf_offset; // new trap frame
-    task->thread_info.fp = task->kern_stack + ufp_offset;
-    task->thread_info.x19 = tf->x30;
-    task->thread_info.x20 = task->user_stack + usp_offset;
-    rq_len++;
-
-    disable_intr();
-    if (current->signal != NULL)
-    {
-        Signal *iter = current->signal;
-        do {
-            Signal *new_sig = new_signal(iter->signo, iter->handler);
-            if (task->signal == NULL) {
-                task->signal = new_sig;
-            } else {
-                list_add_tail(&new_sig->list, &task->signal);
-            }
-            iter = container_of(iter->list.next, Signal, list);
-        } while (iter != current->signal);
-    }
-
-    list_add_tail(&task->list, &rq);
-    enable_intr();
-
-    tf->x0 = task->pid;
-    return task->pid;
-}
-
-int32_t __exec(void *trap_frame, void(*prog)(), char *const argv[])
-{
-    TrapFrame *tf = trap_frame;
-    char *syscall_img = (char *) kmalloc(246920);
-    memcpy(syscall_img, prog, 246920);
-
-    current->pid = _currpid++;
-    
-    tf->x30 = syscall_img;
-    tf->sp_el0 = current->user_stack;
-    tf->sp_el0 += THREAD_STACK_SIZE - 8;
-
-    return 0;
-}
-
 void schedule()
 {
-    if (get_rq_count() == 1)
+    if (rq.len == 1)
         return;
 
+    disable_intr();
+
+    /* Pick next task */
     TaskStruct *next = container_of(current->list.next, TaskStruct, list);
-    while (&next->list == &rq || next == current)
+    while (&next->list == &rq.list || next == current)
         next = container_of(next->list.next, TaskStruct, list);
 
     update_timer();
     switch_to(current, next);
+
+    enable_intr();
 }
 
 void try_schedule()
@@ -126,8 +64,9 @@ void try_schedule()
     if (current != NULL && current->time == 0) {
         schedule();
         current->time = TIME_SLOT;
+    } else {
+        update_timer();
     }
-    update_timer();
 }
 
 void main_thread_init()
@@ -137,11 +76,13 @@ void main_thread_init()
     main_task->status = RUNNING;
     main_task->prio = 1;
     main_task->user_stack = 0;
-    main_task->kern_stack = kern_end;
+    main_task->kern_stack = (void *)kern_end;
     LIST_INIT(main_task->list);
     
-    rq_len++;
-    list_add(&main_task->list, rq.next);
+    disable_intr();
+    list_add(&main_task->list, rq.list.next);
+    rq.len++;
+    enable_intr();
 
     write_sysreg(tpidr_el1, main_task);
     update_timer();
@@ -156,25 +97,33 @@ void thread_release(TaskStruct *target, int16_t ec)
     target->status = EXITED;
     target->exit_code = ec;
 
+    TaskStruct *next = NULL;
+    
     disable_intr();
-
-    TaskStruct *next = container_of(current->list.next, TaskStruct, list);
-    while (&next->list == &rq || next == current)
-        next = container_of(next->list.next, TaskStruct, list);
+    if (target == current) {
+        /* Find the next task */
+        next = container_of(current->list.next, TaskStruct, list);
+        while (&next->list == &rq.list || next == current)
+            next = container_of(next->list.next, TaskStruct, list);
+    }
 
     list_del(&target->list);
+    rq.len--;
+    enable_intr();
+
+    while (eq.lock);
+    eq.lock = 1;
+
     LIST_INIT(target->list);
-    list_add_tail(&target->list, &eq);
+    list_add_tail(&target->list, &eq.list);
+    eq.len++;
     
-    rq_len--;
-    eq_len++;
+    eq.lock = 0;
 
     if (target == current) {
+        disable_intr();
         update_timer();
-        enable_intr();
         switch_to(target, next);
-    } else {
-        enable_intr();
     }
 }
 
@@ -194,20 +143,19 @@ uint32_t create_kern_task(void(*func)(), void *arg)
     task->prio = 2;
     task->user_stack = 0;
 
-    thread_info->x19 = func;
-    thread_info->x20 = arg;
+    thread_info->x19 = (uint64_t)func;
+    thread_info->x20 = (uint64_t)arg;
     
-    thread_info->sp = (uint64_t) kmalloc(THREAD_STACK_SIZE);
-    task->kern_stack = thread_info->sp;
+    thread_info->sp = (uint64_t)kmalloc(THREAD_STACK_SIZE);
+    task->kern_stack = (void *)thread_info->sp;
     thread_info->sp += THREAD_STACK_SIZE - 8;
     thread_info->fp = thread_info->sp;
 
-    thread_info->lr = __thread_trampoline;
+    thread_info->lr = (uint64_t)__thread_trampoline;
     
-    rq_len++;
-
     disable_intr();
-    list_add_tail(&task->list, &rq);
+    list_add_tail(&task->list, &rq.list);
+    rq.len++;
     enable_intr();
 
     return 0;
@@ -222,24 +170,22 @@ uint32_t create_user_task(void(*prog)())
     task->status = STOPPED;
     task->prio = 2;
 
-    thread_info->x19 = prog;
+    thread_info->x19 = (uint64_t)prog;
     
     thread_info->x20 = (uint64_t) kmalloc(THREAD_STACK_SIZE);
-    task->user_stack = thread_info->x20;
+    task->user_stack = (void *)thread_info->x20;
     thread_info->x20 += THREAD_STACK_SIZE - 8;
-    
 
     thread_info->sp = (uint64_t) kmalloc(THREAD_STACK_SIZE);
-    task->kern_stack = thread_info->sp;
+    task->kern_stack = (void *)thread_info->sp;
     thread_info->sp += THREAD_STACK_SIZE - 8;
     thread_info->fp = thread_info->sp;
 
-    thread_info->lr = from_el1_to_el0;
+    thread_info->lr = (uint64_t)from_el1_to_el0;
 
-    rq_len++;
-    
     disable_intr();
-    list_add_tail(&task->list, &rq);
+    list_add_tail(&task->list, &rq.list);
+    rq.len++;
     enable_intr();
 
     return 0;
@@ -247,15 +193,16 @@ uint32_t create_user_task(void(*prog)())
 
 void kill_zombies()
 {
-    if (is_eq_empty())
+    if (IS_EQ_EMPTY)
         return;
 
-    disable_intr();
-
-    TaskStruct *iter = container_of(eq.next, TaskStruct, list);
+    while (eq.lock);
+    eq.lock = 1;
+    
+    TaskStruct *iter = container_of(eq.list.next, TaskStruct, list);
     TaskStruct *prev;
 
-    while (eq_len)
+    while (eq.len)
     {
         if (iter->signal != NULL)
         {
@@ -276,10 +223,10 @@ void kill_zombies()
             kfree(prev->user_stack);
         kfree(prev->kern_stack);
         kfree(prev);
-        eq_len--;
+        eq.len--;
     }
 
-    enable_intr();
+    eq.lock = 0;
 }
 
 void idle()
@@ -288,4 +235,69 @@ void idle()
         kill_zombies();
         schedule();
     }
+}
+
+int32_t svc_fork()
+{
+    TrapFrame *tf = (void *)read_normreg(x8);
+    TaskStruct *task = new_task();
+
+    task->pid = _currpid++;
+    task->prio = current->prio;
+    task->status = RUNNING;
+
+    int64_t usp_offset = tf->sp_el0 - (uint64_t)current->user_stack;
+    int64_t ufp_offset = tf->x29 - (uint64_t)current->user_stack;
+
+    task->user_stack = kmalloc(THREAD_STACK_SIZE);
+    task->kern_stack = kmalloc(THREAD_STACK_SIZE);
+
+    memcpy(task->user_stack, current->user_stack, THREAD_STACK_SIZE);
+    memcpy(task->kern_stack, current->kern_stack, THREAD_STACK_SIZE);
+
+    uint64_t tf_offset = (uint64_t)tf - (uint64_t)current->kern_stack;
+    task->thread_info.lr = (uint64_t)fork_handler;
+    task->thread_info.sp = (uint64_t)task->kern_stack + tf_offset; // new trap frame
+    task->thread_info.fp = (uint64_t)task->kern_stack + ufp_offset;
+    task->thread_info.x19 = tf->x30;
+    task->thread_info.x20 = (uint64_t)task->user_stack + usp_offset;
+
+    if (current->signal != NULL)
+    {
+        Signal *iter = current->signal;
+        do {
+            Signal *new_sig = new_signal(iter->signo, iter->handler);
+            if (task->signal == NULL) {
+                task->signal = new_sig;
+            } else {
+                list_add_tail(&new_sig->list, &task->signal->list);
+            }
+            iter = container_of(iter->list.next, Signal, list);
+        } while (iter != current->signal);
+    }
+    
+    disable_intr();
+    list_add_tail(&task->list, &rq.list);
+    rq.len++;
+    enable_intr();
+
+    tf->x0 = task->pid;
+    return task->pid;
+}
+
+int32_t svc_exec(const char *name, char *const argv[])
+{
+    TrapFrame *tf = (void *)read_normreg(x8);
+    CpioHeader cpio_obj;
+    if (cpio_find_file(name, &cpio_obj) != 0)
+        return -1;
+
+    char *syscall_img = (char *)kmalloc(cpio_obj.c_filesize);
+    memcpy(syscall_img, cpio_obj.content, cpio_obj.c_filesize);
+
+    current->pid = _currpid++;
+    tf->x30 = (uint64_t)syscall_img;
+    tf->sp_el0 = (uint64_t)current->user_stack + THREAD_STACK_SIZE - 8;
+
+    return 0;
 }

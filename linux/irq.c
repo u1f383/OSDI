@@ -1,10 +1,10 @@
-#include <linux/sched.h>
-#include <interrupt/irq.h>
-#include <gpio/uart.h>
+#include <sched.h>
+#include <irq.h>
+#include <gpio.h>
 #include <types.h>
 #include <util.h>
-#include <lib/printf.h>
-#include <linux/mm.h>
+#include <printf.h>
+#include <mm.h>
 
 static uint64_t jiffies = 0;
 
@@ -26,13 +26,11 @@ typedef struct _BottomHalfJob
 } BottomHalfJob;
 
 
-struct list_head time_jobs_hdr = LIST_HEAD_INIT(time_jobs_hdr);
-struct list_head bhj_hdr = LIST_HEAD_INIT(bhj_hdr);
+static struct list_head time_jobs_hdr = LIST_HEAD_INIT(time_jobs_hdr);
+static struct list_head bhj_hdr = LIST_HEAD_INIT(bhj_hdr);
 
-bool first_exception = 1;
-
-#define is_time_job_empty() (time_jobs_hdr.next == &time_jobs_hdr)
-#define is_bhj_empty() (bhj_hdr.next == &bhj_hdr)
+#define IS_TIME_JOB_EMPTY (time_jobs_hdr.next == &time_jobs_hdr)
+#define IS_BHJ_EMPTY (bhj_hdr.next == &bhj_hdr)
 
 void add_timer(void (*callback)(void*), void *arg, uint32_t duration);
 BottomHalfJob *add_bhj(void (*callback)(void*), void *arg, int32_t prio);
@@ -74,7 +72,7 @@ void add_timer(void(*callback)(void*), void *arg, uint32_t second)
 
     TimeJob *time_job = new_time_job(callback, arg, duration);
 
-    if (is_time_job_empty()) {
+    if (IS_TIME_JOB_EMPTY) {
         list_add(&time_job->list, &time_jobs_hdr);
     } else {
         TimeJob *first_tj = container_of(time_jobs_hdr.next, TimeJob, list);
@@ -91,7 +89,7 @@ BottomHalfJob *add_bhj(void (*callback)(void*), void *arg, int32_t prio)
 {
     BottomHalfJob *bhj = new_bhj(callback, arg, prio);
 
-    if (is_bhj_empty()) {
+    if (IS_BHJ_EMPTY) {
         list_add(&bhj->list, &bhj_hdr);
     } else {
         BottomHalfJob *first = container_of(bhj_hdr.next, BottomHalfJob, list);
@@ -124,6 +122,7 @@ BottomHalfJob *add_bhj(void (*callback)(void*), void *arg, int32_t prio)
                 list_add(&bhj->list, iter->list.prev);
         }
     }
+    
     return bhj;
 }
 
@@ -132,20 +131,19 @@ void timer_intr_handler()
     jiffies++;
     current->time--;
 
-    if (is_time_job_empty())
+    if (IS_TIME_JOB_EMPTY)
         return;
 
     TimeJob *iter = container_of(time_jobs_hdr.next, TimeJob, list);
     TimeJob *next;
     uint32_t del_cnt = 0;
 
-    while (iter != &time_jobs_hdr)
+    while (&iter->list != &time_jobs_hdr)
     {
         next = container_of(iter->list.next, TimeJob, list);
-        if (iter->duration-- == 0)
-        {
+        if (iter->duration-- == 0) {
             iter->callback(iter->arg);
-            list_del(iter);
+            list_del(&iter->list);
             del_cnt++;
         }
         iter = next;
@@ -156,29 +154,26 @@ void timer_intr_handler()
 
 void irq_handler()
 {
-    uint32_t int_src = *(uint32_t *) CORE0_INTERRUPT_SRC;
+    uint32_t int_src = *(uint32_t *)CORE0_INTERRUPT_SRC;
     BottomHalfJob *bhj = NULL, *prev = NULL;
     
     /* Timer handling - check if CNTPNSIRQ interrupt bit is set */
-    if (int_src & 0b10)
-    {
+    if (int_src & 0b10) {
         bhj = add_bhj(timer_intr_handler, NULL, 1);
         disable_timer();
-    }
-    else if (aux_regs->mu_iir & 0b110)
-    {
+    } else if (aux_regs->mu_iir & 0b110) {
         /* Mask UART interrupt */
-        bhj = add_bhj(uart_intr_handler, aux_regs->mu_ier, 2);
+        bhj = add_bhj((void (*)(void*))uart_intr_handler,
+                        (void *)(uint64_t)aux_regs->mu_ier, 2);
         disable_uart();
-    }
-    else
+    } else
         return;
 
     BottomHalfJob *first = container_of(bhj_hdr.next, BottomHalfJob, list);
     if (bhj != first)
         return;
 
-    while (!is_bhj_empty() && !bhj->running)
+    while (!IS_BHJ_EMPTY && !bhj->running)
     {
         bhj->running = 1;
 

@@ -56,9 +56,9 @@ int strlen(const char *s1);
 /* MEMORY OPERATION */
 #define ALIGN(x, a)	 (((x) + ((a) - 1)) & ~((a) - 1))
 #define PALIGN(p, a) ((void *)(ALIGN((unsigned long)(p), (a))))
-int memcmp(const char *dst, const char *src, uint32_t sz);
-void memcpy(char *dst, const char *src, uint32_t sz);
-void memset(char *s1, char c, uint32_t sz);
+int memcmp(const void *dst, const void *src, uint32_t sz);
+void memcpy(void *dst, const void *src, uint32_t sz);
+void memset(void *s1, char c, uint32_t sz);
 
 /* MATH OPERATION */
 uint64_t ceiling_2(uint64_t value);
@@ -97,5 +97,6 @@ int8_t log_2(uint64_t value);
 
 /* OTHER HELPER */
 void delay(int cycles);
+#define hangon() do{ while (1); } while (0)
 
 #endif /* _UTIL_H_ */

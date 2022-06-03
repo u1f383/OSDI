@@ -1,6 +1,6 @@
-#include <linux/signal.h>
-#include <linux/mm.h>
-#include <linux/sched.h>
+#include <signal.h>
+#include <mm.h>
+#include <sched.h>
 
 void (*default_sighand[])(int) = \
 {
@@ -12,7 +12,7 @@ void (*default_sighand[])(int) = \
     ignore,
     ignore,
     ignore,
-    sigkill_handler,
+    svc_kill,
 };
 
 Signal *new_signal(int SIGNAL, void (*handler)())
@@ -27,20 +27,18 @@ Signal *new_signal(int SIGNAL, void (*handler)())
 SignalCtx *new_signal_ctx(void *tf)
 {
     SignalCtx *signal_ctx = kmalloc(sizeof(SignalCtx));
-    signal_ctx->user_stack = 0;
     signal_ctx->tf = kmalloc(sizeof(TrapFrame));
+    signal_ctx->user_stack = kmalloc(THREAD_STACK_SIZE);
     memcpy(signal_ctx->tf, tf, sizeof(TrapFrame));
     return signal_ctx;
 }
 
-void sigkill_handler(int pid)
+void svc_kill(int pid)
 {
-    disable_intr();
-    
     TaskStruct *first, *curr;
-    /* Traverse run queue */
-    if (!is_rq_empty()) {
-        first = container_of(rq.next, TaskStruct, list);
+
+    if (!IS_RQ_EMPTY) {
+        first = container_of(rq.list.next, TaskStruct, list);
         curr = first;
         
         do {
@@ -52,28 +50,23 @@ void sigkill_handler(int pid)
             curr = container_of(curr->list.next, TaskStruct, list);
         } while (curr != first);
     }
-
-    /* Traverse wait queue */
-    if (!is_wq_empty()) {
-        first = container_of(wq.next, TaskStruct, list);
-        curr = first;
-        
-        do {
-            if (curr->pid == pid) {
-                thread_release(curr, EXIT_CODE_KILL);
-                return;
-            }
-
-            curr = container_of(curr->list.next, TaskStruct, list);
-        } while (curr != first);
-    }
-
-    enable_intr();
 }
 
 void ignore(int pid)
 {
     return;
+}
+
+void sigctx_update(void *trap_frame, void (*handler)())
+{
+    TrapFrame *tf = trap_frame;
+    SignalCtx *signal_ctx = new_signal_ctx(tf);
+    
+    current->signal_ctx = signal_ctx;
+    
+    tf->x30 = (uint64_t)call_sigreturn;
+    tf->elr_el1 = (uint64_t)handler;
+    tf->sp_el0 = (uint64_t)((char *)signal_ctx->user_stack + THREAD_STACK_SIZE - 0x8);
 }
 
 void try_signal_handle(void *trap_frame)
@@ -96,5 +89,43 @@ void try_signal_handle(void *trap_frame)
             } while (iter != current->signal);
             default_sighand[signo - 1](current->pid);
         }
+    }
+}
+
+void svc_sigreturn()
+{
+    memcpy((void *)read_normreg(x8), current->signal_ctx->tf, sizeof(TrapFrame));
+    kfree(current->signal_ctx->tf);
+    kfree(current->signal_ctx->user_stack);
+    kfree(current->signal_ctx);
+    current->signal_ctx = NULL;
+}
+
+void svc_signal(int SIGNAL, void (*handler)())
+{
+    Signal *signal = new_signal(SIGNAL, handler);
+    
+    if (current->signal == NULL)
+        current->signal = signal;
+    else
+        list_add(&signal->list, &current->signal->list);
+}
+
+void svc_sigkill(int pid, int SIGNAL)
+{
+     TaskStruct *first, *curr = NULL;
+
+    if (!IS_RQ_EMPTY) {
+        first = container_of(rq.list.next, TaskStruct, list);
+        curr = first;
+        do {
+            if (curr->pid == pid) {
+                if (curr->signal_queue == 0)
+                    /* Send signal if there is not pending signal */
+                    curr->signal_queue = SIGNAL;
+                return;
+            }
+            curr = container_of(curr->list.next, TaskStruct, list);
+        } while (curr != first);
     }
 }

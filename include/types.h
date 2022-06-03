@@ -25,7 +25,6 @@ typedef volatile uint64_t reg64;
 typedef uint32_t uid_t;
 typedef uint32_t gid_t;
 
-typedef uint64_t addr_t;
 typedef uint64_t time64_t;
 typedef uint32_t dev_t;
 

@@ -2,15 +2,22 @@
 #define _INIT_DTB_H_
 
 #include <util.h>
+
 #define DTB_MAGIC 0xd00dfeed
 
+#define FDT_BEGIN_NODE 0x00000001
+#define FDT_END_NODE   0x00000002
+#define FDT_PROP       0x00000003
+#define FDT_NOP        0x00000004
+#define FDT_END        0x00000009
+
+/**
+ * Flat device tree structure:
+ * https://devicetree-specification.readthedocs.io/en/v0.1/flattened-format.html
+ */
 typedef struct _Fdt_header
 {
     uint32_t magic;
-    /**
-     * Contain the header, the mem rsrvmap,
-     * structure block and strings block
-     */
     uint32_t totalsize;
     uint32_t off_dt_struct;
     uint32_t off_dt_strings;
@@ -28,12 +35,7 @@ typedef struct _Fdt_rsv_entry
     uint64_t size;
 } Fdt_rsv_entry;
 
-#define FDT_BEGIN_NODE 0x00000001
-#define FDT_END_NODE   0x00000002
-#define FDT_PROP       0x00000003
-#define FDT_NOP        0x00000004
-#define FDT_END        0x00000009
-
 void parse_dtb(void (*func)());
+void dtb_init(void *_dtb_base);
 
 #endif /* _KERNEL_DTB_H_ */

@@ -1,10 +1,10 @@
 #include <util.h>
 #include <types.h>
-#include <txrx/txrx.h>
-#include <gpio/uart.h>
-#include <gpio/base.h>
-#include <gpio/mailbox.h>
-#include <lib/printf.h>
+#include <txrx.h>
+#include <gpio.h>
+#include <base.h>
+#include <mailbox.h>
+#include <printf.h>
 
 #define KERNEL_BASE_ADDR 0x80000
 #define PM_REG (PERIF_ADDRESS + 0x100000)
@@ -16,8 +16,7 @@
 void reset(int tick);
 void cancel_reset();
 
-static char *kernel_addr =(char *) KERNEL_BASE_ADDR;
-extern addr_t dtb_base;
+static char *kernel_addr =(char *)KERNEL_BASE_ADDR;
 
 /* Reboot pi after watchdog timer expire */
 void reset(int tick)
@@ -50,7 +49,7 @@ void load_kernel()
     static int _kern_is_loaded = 0;
     char buf[ 1024 + sizeof(Packet) ];
     char *_kern_addr = kernel_addr;
-    Packet *packet = (Packet *) buf;
+    Packet *packet = (Packet *)buf;
     uint8_t checksum;
     
     if (_kern_is_loaded)
@@ -71,7 +70,7 @@ void load_kernel()
     
     while (1)
     {
-        uart_recv_num((char *) packet, sizeof(Packet));
+        uart_recv_num((char *)packet, sizeof(Packet));
         if (packet->status == STATUS_END)
             break;
 
@@ -79,7 +78,7 @@ void load_kernel()
         memcpy(_kern_addr, packet->data, packet->size);
         _kern_addr += packet->size;
 
-        checksum = calc_checksum((unsigned char*) packet->data, packet->size);
+        checksum = calc_checksum((unsigned char*)packet->data, packet->size);
 
         if (checksum != packet->checksum)
         {
@@ -89,10 +88,10 @@ void load_kernel()
         else
             packet->status = STATUS_OK;
 
-        uart_send_num((char *) packet, sizeof(Packet));
+        uart_send_num((char *)packet, sizeof(Packet));
     }
     packet->status = STATUS_FIN;
-    uart_send_num((char *) packet, sizeof(Packet));
+    uart_send_num((char *)packet, sizeof(Packet));
     _kern_is_loaded = 1;
 }
 

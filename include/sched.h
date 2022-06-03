@@ -3,8 +3,9 @@
 
 #include <types.h>
 #include <list.h>
-#include <interrupt/irq.h>
-#include <linux/signal.h>
+#include <irq.h>
+#include <signal.h>
+#include <initramfs.h>
 
 #define THREAD_STACK_SIZE 0x2000
 #define current get_current()
@@ -75,28 +76,32 @@ typedef struct _TaskStruct {
     int16_t exit_code;
     uint32_t prio;
     uint32_t time;
-    addr_t user_stack;
-    addr_t kern_stack;
+    void *user_stack;
+    void *kern_stack;
     struct list_head list;
     Signal *signal;
     SignalCtx *signal_ctx;
     uint8_t signal_queue;
 } TaskStruct;
+
+typedef struct _TaskQueue {
+    struct list_head list;
+    uint32_t len;
+    uint8_t lock;
+} TaskQueue;
+
 #define EXIT_CODE_OK   1
 #define EXIT_CODE_KILL 2
 
-extern struct list_head rq, wq, eq;
-#define get_rq_count() (rq_len)
-#define get_wq_count() (wq_len)
-#define get_eq_count() (eq_len)
-#define is_rq_empty() (rq.next == &rq)
-#define is_wq_empty() (wq.next == &wq)
-#define is_eq_empty() (eq.next == &eq)
-#define get_task_count() (rq_len + wq_len + eq_len)
+extern TaskQueue rq, eq;
+#define IS_RQ_EMPTY (rq.len == 0)
+#define IS_EQ_EMPTY (eq.len == 0)
 
-int32_t __exec(void *trap_frame, void(*prog)(), char *const argv[]);
-int32_t __fork(void *trap_frame);
+int32_t svc_exec(const char *name, char *const argv[]);
+int32_t svc_fork();
+
 TaskStruct *get_current();
+void task_queue_init();
 void try_schedule();
 void schedule();
 void idle();
@@ -113,6 +118,5 @@ void thread_trampoline(void(*func)(void *), void *arg);
 void __thread_trampoline();
 void from_el1_to_el0();
 void fork_handler();
-void sigctx_update(void *trap_frame, void (*handler)());
 
 #endif /* _LINUX_SCHED_H_ */

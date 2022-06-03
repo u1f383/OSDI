@@ -1,30 +1,11 @@
-#include <init/initramfs.h>
-#include <interrupt/irq.h>
-#include <init/dtb.h>
-#include <lib/printf.h>
-#include <gpio/uart.h>
-#include <linux/mm.h>
-#include <linux/sched.h>
-
-extern addr_t dtb_base, dtb_end;
-
-void init_cpio(char *node_name, char *prop_name, char *value, int len)
-{
-    if (prop_name) {
-        if (!strcmp(prop_name, "linux,initrd-start"))
-        {
-            cpio_start = endian_xchg_32( *(uint32_t *) value );
-        }
-        else if (!strcmp(prop_name, "linux,initrd-end"))
-        {
-            cpio_end = endian_xchg_32( *(uint32_t *) value );
-        }
-        else if (!strcmp(prop_name, "memreserve"))
-        {
-            phys_mem_end = endian_xchg_32( *(uint32_t *) value );
-        }
-    }
-}
+#include <initramfs.h>
+#include <irq.h>
+#include <dtb.h>
+#include <printf.h>
+#include <gpio.h>
+#include <mm.h>
+#include <sched.h>
+#include <util.h>
 
 void usage()
 {
@@ -46,79 +27,58 @@ void foo()
     }
 }
 
-void kernel()
+void cpio_init_cb(char *node_name, char *prop_name, char *value, int len)
+{
+    if (prop_name) {
+        if (!strcmp(prop_name, "linux,initrd-start"))
+            cpio_start = endian_xchg_32(*(uint32_t *)value);
+        else if (!strcmp(prop_name, "linux,initrd-end"))
+            cpio_end = endian_xchg_32(*(uint32_t *)value);
+        else if (!strcmp(prop_name, "memreserve"))
+            phys_mem_end = endian_xchg_32(*(uint32_t *)value);
+    }
+
+    if (cpio_start && cpio_end)
+        register_mem_reserve(cpio_start, cpio_end);
+}
+
+static inline void counter_timer_init()
+{
+    /* Counter-timer Kernel Control register */
+    uint64_t tmp;
+    asm volatile("mrs %0, cntkctl_el1" : "=r"(tmp));
+    tmp |= 1;
+    asm volatile("msr cntkctl_el1, %0" : : "r"(tmp));
+}
+
+void kernel(void *dtb_base)
 {
     uint64_t boot_time = read_sysreg(cntpct_el0);
 
     uart_init();
     printf_init(uart_sendstr);
-    parse_dtb(init_cpio);
-    
+    dtb_init(dtb_base);
+    parse_dtb(cpio_init_cb);
     page_init();
-    memory_reserve(cpio_start, cpio_end);
-    memory_reserve(dtb_base, dtb_end);
     buddy_init();
     slab_init();
-
-    uart_eint();
-    printf("boot_time: %x\r\n", boot_time);
-
-    uint64_t tmp;
-    asm volatile("mrs %0, cntkctl_el1" : "=r"(tmp));
-    tmp |= 1;
-    asm volatile("msr cntkctl_el1, %0" : : "r"(tmp));
-
+    uart_enable_intr();
+    counter_timer_init();
+    task_queue_init();
     main_thread_init();
-    enable_intr();
+
+    printf("boot_time: %x\r\n", boot_time);
 
     for (int i = 0; i < 3; i++)
         create_kern_task(foo, NULL);
 
-    char *tmp_program = cpio_find_file("syscall.img");
-    char *program = (char *) kmalloc(246920);
+    CpioHeader cpio_obj;
+    if (cpio_find_file("syscall.img", &cpio_obj) != 0)
+        hangon();
 
-    memcpy(program, tmp_program, 246920);
+    void(*program)() = (void (*)())kmalloc(cpio_obj.c_filesize);
+    memcpy(program, cpio_obj.content, cpio_obj.c_filesize);
     create_user_task(program);
 
     idle();
-
-    // char cmd[0x20];
-    // while (1)
-    // {
-    //     async_uart_sendstr("# ");
-    //     async_uart_cmd(cmd);
-    //     async_uart_sendstr("\r\n");
-
-    //     if (!strcmp(cmd, "help")) {
-    //         usage();
-    //     } else if (!strcmp(cmd, "ls")) {
-    //         cpio_ls();
-    //     } else if (!strcmp(cmd, "run_user")) {
-    //         char *program = cpio_find_file("rootfs//user_program");
-    //         if (program == NULL)
-    //             printf("File not found.\r\n");
-    //         else
-    //             from_el1_to_el0((uint64_t) program);
-    //     } else if (!strncmp(cmd, "set_timeout", 11)) {
-    //         char *ptr = cmd;
-    //         char *tmp, *msg;
-    //         uint32_t timeout;
-
-    //         while (*ptr && *ptr++ != ' ');
-    //         if (*ptr == '\0')
-    //             continue;
-    //         tmp = ptr;
-
-    //         while (*ptr && *++ptr != ' ')
-    //         if (*ptr == '\0')
-    //             continue;
-    //         *ptr++ = '\0';
-    //         timeout = strtou(ptr, 10);
-
-    //         msg = kmalloc(10);
-    //         strcpy(msg, tmp);
-    //         add_timer(uart_sendstr, msg, timeout);
-    //         kfree(msg);
-    //     }
-    // }
 }

@@ -1,11 +1,11 @@
-#ifndef _GPIO_BASE_H_
-#define _GPIO_BASE_H_
+#ifndef _GPIO_H_
+#define _GPIO_H_
 
 #include <util.h>
 #include <types.h>
 
-/**
- * @ You can see the device tree of bcm2837 board in
+/** 
+ * Device tree of bcm2837 board:
  * https://github.com/raspberrypi/linux/blob/rpi-5.15.y/arch/arm/boot/dts/bcm2837.dtsi
  */
 #define PERIF_ADDRESS 0x3F000000
@@ -165,4 +165,115 @@ struct _AuxRegs
 } __attribute__((__packed__));
 typedef struct _AuxRegs AuxRegs;
 
-#endif /* _GPIO_BASE_H_ */
+/**
+ * ============ GPIO ============
+ */
+#define GPIO_PERIF_REG_MAP_BASE (PERIF_ADDRESS + 0x200000)
+
+#define GPIO_GPFSEL0_REG ((reg32 *)(GPIO_PERIF_REG_MAP_BASE + 0x0))
+#define GPIO_GPFSEL1_REG ((reg32 *)(GPIO_PERIF_REG_MAP_BASE + 0x4))
+#define GPIO_GPFSEL2_REG ((reg32 *)(GPIO_PERIF_REG_MAP_BASE + 0x8))
+#define GPIO_GPFSEL3_REG ((reg32 *)(GPIO_PERIF_REG_MAP_BASE + 0xC))
+#define GPIO_GPFSEL4_REG ((reg32 *)(GPIO_PERIF_REG_MAP_BASE + 0x10))
+#define GPIO_GPFSEL5_REG ((reg32 *)(GPIO_PERIF_REG_MAP_BASE + 0x14))
+#define GPIO_FSEL_SIZE  3
+#define GPIO_FSEL14_BIT 12 /* GPIO 14 PIN */
+#define GPIO_FSEL15_BIT 15 /* GPIO 15 PIN */
+
+#define GPIO_GPSET0_REG ((reg32 *)(GPIO_PERIF_REG_MAP_BASE + 0x1C))
+#define GPIO_GPSET1_REG ((reg32 *)(GPIO_PERIF_REG_MAP_BASE + 0x20))
+
+#define GPIO_GPCLR0_REG ((reg32 *)(GPIO_PERIF_REG_MAP_BASE + 0x28))
+
+#define GPIO_GPLEV0_REG ((reg32 *)(GPIO_PERIF_REG_MAP_BASE + 0x34))
+#define GPIO_GPLEV1_REG ((reg32 *)(GPIO_PERIF_REG_MAP_BASE + 0x38))
+
+#define GPIO_GPEDS0_REG ((reg32 *)(GPIO_PERIF_REG_MAP_BASE + 0x40))
+#define GPIO_GPEDS1_REG ((reg32 *)(GPIO_PERIF_REG_MAP_BASE + 0x44))
+
+#define GPIO_GPHEN0_REG ((reg32 *)(GPIO_PERIF_REG_MAP_BASE + 0x64))
+#define GPIO_GPHEN1_REG ((reg32 *)(GPIO_PERIF_REG_MAP_BASE + 0x68))
+
+#define GPIO_GPPUD_REG ((reg32 *)(GPIO_PERIF_REG_MAP_BASE + 0x94))
+#define GPIO_GPPUDCLK0_REG ((reg32 *)(GPIO_PERIF_REG_MAP_BASE + 0x98))
+#define GPIO_GPPUDCLK1_REG ((reg32 *)(GPIO_PERIF_REG_MAP_BASE + 0x9C))
+#define GPIO_GPPUD_Off 0b00
+#define GPIO_GPPUD_Enable_Pull_Down 0b01
+#define GPIO_GPPUD_Enable_Pull_Up 0b10
+#define GPIO_GPPUDCLK_NO_EFFECT 0
+
+/**
+ * ============ UART ============
+ */
+
+/* Default core clock is fixed to 250 MHz */
+#define VPU_SYSTEM_CLOCK_FREQ (250 * 1000 * 1000)
+#define BAUDRATE 115200
+#define BAUDRATE_REG ((VPU_SYSTEM_CLOCK_FREQ / (8 * BAUDRATE)) - 1) // 271
+
+#define ARM_INT_REG_BASE (PERIF_ADDRESS + 0xB000)
+#define ARM_INT_IRQs1_REG (ARM_INT_REG_BASE + 0x210)
+
+extern AuxRegs *aux_regs;
+
+void uart_init();
+void uart_intr_handler(reg32 orig_ier);
+
+void uart_send(char c);
+void uart_send_num(char *buf, int num);
+void uart_recvline(char *ptr);
+char uart_recv();
+void uart_recv_num(char *buf, int num);
+void uart_sendstr(const char *str);
+void uart_cmd(char *ptr);
+
+int async_uart_recv_num(char *buf, int num);
+int async_uart_send_num(const char *buf, int num);
+void async_uart_sendstr(const char *str);
+
+static inline void disable_uart()
+{
+    set_value(aux_regs->mu_ier, 0, AUXMUIER_Enable_receive_interrupts_BIT, AUXMUIER_RESERVED_BIT);
+}
+
+static inline void enable_rx_intr()
+{
+    set_value(aux_regs->mu_ier, aux_regs->mu_ier | 1,
+            AUXMUIER_Enable_receive_interrupts_BIT, AUXMUIER_RESERVED_BIT);    
+}
+
+static inline void disable_rx_intr()
+{
+    set_value(aux_regs->mu_ier, aux_regs->mu_ier & ~1,
+            AUXMUIER_Enable_receive_interrupts_BIT, AUXMUIER_RESERVED_BIT);    
+}
+
+static inline void enable_tx_intr()
+{
+    set_value(aux_regs->mu_ier, aux_regs->mu_ier | 0b10,
+            AUXMUIER_Enable_receive_interrupts_BIT, AUXMUIER_RESERVED_BIT);    
+}
+
+static inline void disable_tx_intr()
+{
+    set_value(aux_regs->mu_ier, aux_regs->mu_ier & ~0b10,
+            AUXMUIER_Enable_receive_interrupts_BIT, AUXMUIER_RESERVED_BIT);    
+}
+
+static inline void uart_enable_intr()
+{
+    /* Enable IRQs1 - Aux int */
+    uint32_t *int_reg_irqs1 = (uint32_t *)ARM_INT_IRQs1_REG;
+    *int_reg_irqs1 |= (1 << 29);
+    enable_rx_intr();
+}
+
+/**
+ * ============ Mailbox ============
+ */
+
+void get_board_revision(uint32_t *frev);
+void get_arm_memory(uint32_t *base, uint32_t *size);
+int mailbox_call(uint32_t channel, volatile uint32_t *mbox);
+
+#endif /* _GPIO_H_ */

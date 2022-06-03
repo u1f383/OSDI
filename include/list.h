@@ -13,8 +13,8 @@ struct list_head {
 	struct list_head *next, *prev;
 };
 
-#define LIST_POISON1 ((struct list_head *) 0xDEADBEEF)
-#define LIST_POISON2 ((struct list_head *) 0xC8763000)
+#define LIST_POISON1 ((struct list_head *)0xDEADBEEF)
+#define LIST_POISON2 ((struct list_head *)0xC8763000)
 
 #define LIST_HEAD_INIT(name) (struct list_head) { &(name), &(name) }
 #define LIST_HEAD(name) \

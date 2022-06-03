@@ -87,7 +87,7 @@ int main(int argc, char *argv[])
         return 1;
 
     char *dtb = malloc(0x10000);
-    Fdt_header *fdt_hdr = (Fdt_header *) dtb;
+    Fdt_header *fdt_hdr = (Fdt_header *)dtb;
 
     int fd = open(argv[1], O_RDONLY);
     if (fd == -1)
@@ -111,7 +111,7 @@ int main(int argc, char *argv[])
     fdt_hdr->size_dt_struct = endian_xchg_32(fdt_hdr->size_dt_struct);
     show_hdr(fdt_hdr);
 
-    Fdt_rsv_entry *fdt_rsv = (Fdt_rsv_entry *) (dtb + fdt_hdr->off_mem_rsvmap);
+    Fdt_rsv_entry *fdt_rsv = (Fdt_rsv_entry *)(dtb + fdt_hdr->off_mem_rsvmap);
     int rsv_num = (fdt_hdr->off_dt_struct - fdt_hdr->off_mem_rsvmap) / sizeof(Fdt_rsv_entry);
     for (int i = 0; i < rsv_num; i++)
     {
@@ -128,7 +128,7 @@ int main(int argc, char *argv[])
 
     int unknown_node = 0;
     char *prop_name_base = dtb + fdt_hdr->off_dt_strings;
-    char *fdt_struct = (char *) fdt_rsv;
+    char *fdt_struct = (char *)fdt_rsv;
 
     int level = 0;
     char *spaces = malloc(0x100);
@@ -137,7 +137,7 @@ int main(int argc, char *argv[])
     puts("------------ start parsing ------------");
     while (1)
     {
-        node_type = *(uint32_t *) fdt_struct;
+        node_type = *(uint32_t *)fdt_struct;
         node_type = endian_xchg_32(node_type);
         fdt_struct += 4;
         
@@ -148,21 +148,21 @@ int main(int argc, char *argv[])
 
             node_name = fdt_struct;
             fdt_struct += strlen(node_name) + 1;
-            fdt_struct = (char *) ALIGN_32(fdt_struct);
+            fdt_struct = (char *)ALIGN_32(fdt_struct);
             printf("%.*s begin node string: %s\n", level*2, spaces, node_name);
             break;
         case FDT_END_NODE:
             level--;
             break;
         case FDT_PROP:
-            fdt_node = (Fdt_node *) fdt_struct;
+            fdt_node = (Fdt_node *)fdt_struct;
             fdt_node->len = endian_xchg_32(fdt_node->len);
             fdt_node->nameoff = endian_xchg_32(fdt_node->nameoff);
             prop_name = prop_name_base + fdt_node->nameoff;
             printf("%.*s  |- prop node [%s] len=0x%x\n", level*2, spaces, prop_name, fdt_node->len);
             
             fdt_struct += (sizeof(Fdt_node) + fdt_node->len);
-            fdt_struct = (char *) ALIGN_32(fdt_struct);
+            fdt_struct = (char *)ALIGN_32(fdt_struct);
             break;
         case FDT_NOP:
             break;

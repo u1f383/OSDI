@@ -5,8 +5,8 @@
         ret_from_fork
 
 _kernel:
-    ldr x1, =dtb_base
-    str x0, [x1]
+    # Temporary move dtb base address to x15
+    mov x15, x0
     
     bl from_el2_to_el1
 
@@ -15,12 +15,11 @@ _kernel:
     msr vbar_el1, x0
 
     # Enable timer for ARM
-    #   1      1
-    # IMASK ENABLE
     mov x0, 1
     msr cntp_ctl_el0, x0
 
     # Run kernel
+    mov x0, x15
     b kernel
 
 from_el2_to_el1:
@@ -32,23 +31,17 @@ from_el2_to_el1:
     ldr x0, =_stack
     msr sp_el1, x0
 
+    # Mark EL1 is AArch64 in hypervisor control register
     mov x0, (1 << 31)
     mrs x1, hcr_el2
-
-    # Mark EL1 is AArch64 in hypervisor control register
     orr x0, x0, x1
     msr hcr_el2, x0
     
-    #        1           1        1        1       0 0    0101
-    #     (Debug)     (SError)  (IRQ)     (FIQ)          (Mode)
-    # Debug-exc-mask  Exc-mask Exc-mask Exc-mask   X X   (EL1h)
-    # Setup saved program status register
-    # and enable all interrupt (disable: 0x3c5)
+    # Set return exception level and enable all interrupt
     mov x0, 0x5
     msr spsr_el2, x0
 
-    # Set return address in exception link register
-    # to the value of link registe
+    # Set exception return address to the value of link register
     msr elr_el2, lr
     eret
 
@@ -127,7 +120,7 @@ exception_handler_table:
     bl dummy_handler
 .align 7
     # 5 - SP_ELx - IRQ
-    b _irq_handler_wrapper
+    b irq_handler_wrapper
 .align 7
     # 6
     bl dummy_handler
@@ -141,7 +134,7 @@ exception_handler_table:
     b svc_handler
 .align 7
     # 9 - Lower exception level - IRQ
-    b _irq_handler_wrapper
+    b irq_handler_wrapper
 .align 7
     # 10
     bl dummy_handler
@@ -169,7 +162,6 @@ dummy_handler:
 owo:
     b owo
 
-#define SVC_NUM 0x10
 svc_handler:
     save_registers
 
@@ -179,11 +171,14 @@ svc_handler:
     
     # If not SVC, do nothing
     cmp x1, 0x15
+aaa:
     b.ne dummy_handler
 
     # Get syscall number
-    cmp x8, SVC_NUM
-    b.ge dummy_handler
+    mov x0, x8
+    bl sysno_check
+    cmp x0, 0
+    b.ne svc_handler_ret
 
     # load argument
     ldp x0, x1, [sp ,16 * 0]
@@ -200,6 +195,7 @@ svc_handler:
     blr x2
     msr DAIFSet, 0xf
 
+svc_handler_ret:
     ldp x30, x1, [sp, 16 * 15]
     ldp x2, x3, [sp, 16 * 16]
 
@@ -226,27 +222,14 @@ svc_handler:
     add sp, sp, 16 * 17
     eret
 
-_irq_handler_wrapper:
+irq_handler_wrapper:
     save_registers
     bl irq_handler
-    
-    msr DAIFSet, 0xf
     bl try_schedule
 
     mov x0, sp
     bl try_signal_handle
 
+    msr DAIFSet, 0xf
     restore_registers
     eret
-
-.section ".data"
-
-.global dtb_base
-dtb_base:
-    .long 0
-    .long 0
-
-.global dtb_end
-dtb_end:
-    .long 0
-    .long 0

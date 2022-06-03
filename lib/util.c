@@ -44,28 +44,33 @@ int strcpy(char *s1, const char *s2)
     return s2 - org;
 }
 
-int memcmp(const char *s1, const char *s2, uint32_t sz)
+int memcmp(const void *s1, const void *s2, uint32_t sz)
 {
-    while (sz-- && *s1 == *s2) {
-        s1++;
-        s2++;
+    const char *_s1 = (const char *)s1;
+    const char *_s2 = (const char *)s2;
+    while (sz-- && *_s1 == *_s2) {
+        _s1++;
+        _s2++;
     }
-    return *s1 - *s2;
+    return *_s1 - *_s2;
 }
 
-void memcpy(char *s1, const char *s2, uint32_t sz)
+void memcpy(void *s1, const void *s2, uint32_t sz)
 {
+    char *_s1 = (char *)s1;
+    const char *_s2 = (const char *)s2;
     while (sz--) {
-        *s1 = *s2;
-        s1++;
-        s2++;
+        *_s1 = *_s2;
+        _s1++;
+        _s2++;
     }
 }
 
-void memset(char *s1, char c, uint32_t sz)
+void memset(void *s1, char c, uint32_t sz)
 {
+    char *_s1 = (char *)s1;
     while (sz--)
-        *s1++ = c;
+        *_s1++ = c;
 }
 
 __asm__(
