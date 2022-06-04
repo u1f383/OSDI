@@ -3,27 +3,30 @@
 #include <types.h>
 #include <list.h>
 
-#define MM_PHYS_MEMORY_START
 #define PAGE_SIZE (4 * KB)
 #define PAGE_SHIFT 12
+#define MM_VIRT_KERN_START 0xFFFF000000000000
 #define PFN_BASE_OFFSET (phys_mem_start >> PAGE_SHIFT)
 
 #define phys_to_pfn(_phys_addr) ((((uint64_t) _phys_addr) >> PAGE_SHIFT) - PFN_BASE_OFFSET)
 #define pfn_to_phys(pfn) ( (pfn + PFN_BASE_OFFSET) << PAGE_SHIFT )
+#define pfn_to_virt(pfn) ( pfn_to_phys(pfn) + MM_VIRT_KERN_START )
 
 #define page_to_pfn(_page) ( (((uint64_t) _page) - ((uint64_t) mem_map)) / sizeof(Page) )
 #define pfn_to_page(pfn) (mem_map + pfn)
 
 #define page_to_phys(_page)      pfn_to_phys( page_to_pfn(_page) )
+#define page_to_virt(_page)      pfn_to_virt( page_to_pfn(_page) )
 #define phys_to_page(_phys_addr) pfn_to_page( phys_to_pfn(_phys_addr) )
+#define virt_to_page(_phys_addr) pfn_to_page( phys_to_pfn((uint64_t)_phys_addr - MM_VIRT_KERN_START) )
 
 #define align_page(phys) ( (phys + ((1 << PAGE_SHIFT) - 1)) & ~((1 << PAGE_SHIFT) - 1) )
 
-#define spin_table_start 0x0
-#define spin_table_end   0x1000
-#define kern_start 0x80000
-#define kern_end   0x100000
-#define su_rsvd_base 0x100000
+#define spin_table_start 0xFFFF000000000000
+#define spin_table_end   0xFFFF000000003000
+#define kern_start   0xFFFF000000080000
+#define kern_end     0xFFFF000000100000
+#define su_rsvd_base 0xFFFF000000100000
 #define su_rsvd_size 0x100000
 
 extern uint64_t phys_mem_end;
@@ -77,5 +80,7 @@ void* buddy_alloc(uint32_t req_pgcnt);
 void* kmalloc(uint32_t sz);
 int32_t kfree(void *chk);
 int32_t buddy_free(void *chk);
+
+
 
 #endif /* _ARM_MM_H_ */

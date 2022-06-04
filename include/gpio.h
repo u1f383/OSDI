@@ -8,9 +8,9 @@
  * Device tree of bcm2837 board:
  * https://github.com/raspberrypi/linux/blob/rpi-5.15.y/arch/arm/boot/dts/bcm2837.dtsi
  */
-#define PERIF_ADDRESS 0x3F000000
+#define PERIF_ADDRESS     0xFFFF00003F000000
 #define PERIF_ADDRESS_END (PERIF_ADDRESS + ((16 * MB) - 1)
-#define PERIF_BUS_ADDRESS 0x7E000000
+#define PERIF_BUS_ADDRESS 0xFFFF00007E000000
 #define PERIF_BUS_ADDRESS_END (PERIF_BUS_ADDRESS + ((16 * MB) - 1))
 
 /**

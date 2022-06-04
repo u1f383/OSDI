@@ -8,7 +8,7 @@ static uint64_t dtb_base, dtb_end;
 void dtb_init(void *_dtb_base)
 {
     Fdt_header *fdt_hdr = (Fdt_header *)_dtb_base;
-    dtb_base = (uint64_t)_dtb_base;
+    dtb_base = (uint64_t)_dtb_base + MM_VIRT_KERN_START;
     dtb_end = dtb_base + endian_xchg_32(fdt_hdr->totalsize);
     register_mem_reserve(dtb_base, dtb_end);
 }

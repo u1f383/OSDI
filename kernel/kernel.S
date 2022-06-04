@@ -9,6 +9,7 @@ _kernel:
     mov x15, x0
     
     bl from_el2_to_el1
+    bl page_table_setup
 
     # Setup exception vector table
     ldr x0, =exception_handler_table
@@ -18,9 +19,101 @@ _kernel:
     mov x0, 1
     msr cntp_ctl_el0, x0
 
+#define TCR_CONFIG_REGION_48bit (((64 - 48) << 0) | ((64 - 48) << 16))
+# 4KB granule with 48 bits:
+#  L0 [47:39] (9 bits)
+#  L1 [38:30] (9 bits)
+#  L2 [29:21] (9 bits)
+#  L3 [20:12] (9 bits)
+#  offset [11:0] (12 bits)
+#define TCR_CONFIG_4KB ((0b00 << 14) |  (0b10 << 30))
+#define TCR_CONFIG_DEFAULT (TCR_CONFIG_REGION_48bit | TCR_CONFIG_4KB)
+
+#define MAIR_DEVICE_nGnRnE 0b00000000
+#define MAIR_NORMAL_NOCACHE 0b01000100
+#define MAIR_IDX_DEVICE_nGnRnE 0
+#define MAIR_IDX_NORMAL_NOCACHE 1
+
+#define PD_TABLE 0b11
+#define PD_BLOCK 0b01
+#define PD_TBENT 0b11
+
+#define PD_ACCESS (1 << 10)
+# | AF (access flag, bit[10]) | AttrIndx (bit[4:2]) | Table descriptor type[1:0]
+#define BOOT_PMD_RAM_ATTR   (PD_ACCESS | (MAIR_IDX_NORMAL_NOCACHE << 2) | PD_BLOCK)
+#define BOOT_PMD_PERIF_ATTR (PD_ACCESS | (MAIR_IDX_DEVICE_nGnRnE << 2) | PD_BLOCK)
+#define PERIF_BOOT_PUD_ATTR (PD_ACCESS | (MAIR_IDX_DEVICE_nGnRnE << 2) | PD_BLOCK)
+
+page_table_setup:
+    # Set TG0 to 4KB (0b00) and T0SZ to 16
+    ldr x0, =TCR_CONFIG_DEFAULT
+    msr tcr_el1, x0
+
+    # Setup MAIR
+    ldr x0, =( \
+    (MAIR_DEVICE_nGnRnE << (MAIR_IDX_DEVICE_nGnRnE * 8)) | \
+    (MAIR_NORMAL_NOCACHE << (MAIR_IDX_NORMAL_NOCACHE * 8)) \
+    )
+    msr mair_el1, x0
+
+    # PGD's page frame at 0x0
+    mov x0, 0
+    # PUD's page frame at 0x1000
+    mov x1, 0x1000
+
+    # Combine the physical address of next level page with attribute
+    ldr x2, =PD_TABLE
+    orr x2, x1, x2
+    str x2, [x0]
+
+    ldr x2, =PD_TABLE
+    mov x3, 0x2000
+    orr x3, x2, x3
+    str x3, [x1]
+
+    ldr x2, =PERIF_BOOT_PUD_ATTR
+    mov x3, 0x40000000
+    orr x3, x2, x3
+    str x3, [x1, #8]
+
+    mov x1, 0x2000
+    
+    ldr x2, =BOOT_PMD_RAM_ATTR
+    mov x3, 0x00000000
+    mov x4, 0x3B400000
+    orr x3, x2, x3
+setup_ram_page:
+    str x3, [x1], #8
+    add x3, x3, 0x200000
+    cmp x3, x4
+    b.lt setup_ram_page
+    
+    ldr x2, =BOOT_PMD_PERIF_ATTR
+    mov x3, 0x3B400000
+    mov x4, 0x40000000
+    orr x3, x2, x3
+setup_perif_page:
+    str x3, [x1], #8
+    add x3, x3, 0x200000
+    cmp x3, x4
+    b.lt setup_perif_page
+
+    # Load PGD to the bottom translation-based register
+    # Use identity paging temporarily
+    msr ttbr0_el1, x0
+    # Also load PGD to the upper translation based register
+    msr ttbr1_el1, x0
+
+    # MMU enable for EL1 and EL0
+    mrs x2, sctlr_el1
+    orr x2, x2, 1
+    msr sctlr_el1, x2
+
+boot_rest:
     # Run kernel
     mov x0, x15
-    b kernel
+    ldr x2, =kernel
+    br x2
 
 from_el2_to_el1:
     # Allow select stack
@@ -159,8 +252,6 @@ exception_handler_table:
 .align 7
 dummy_handler:
     msr DAIFClr, 0xf
-owo:
-    b owo
 
 svc_handler:
     save_registers
@@ -171,7 +262,6 @@ svc_handler:
     
     # If not SVC, do nothing
     cmp x1, 0x15
-aaa:
     b.ne dummy_handler
 
     # Get syscall number

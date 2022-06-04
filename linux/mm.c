@@ -18,7 +18,7 @@ const RsvdMem user_rsvd_memory[] = {
 };
 
 uint64_t phys_mem_start = 0, \
-       phys_mem_end = 0x3B400000;
+         phys_mem_end = 0x3B400000;
 
 FreeArea *free_area[PAGE_ORDER_MAX+1];
 Page *mem_map;
@@ -63,8 +63,8 @@ void register_mem_reserve(uint64_t start, uint64_t end)
     start = _floor(start, PAGE_SHIFT);
     end = _ceil(end, PAGE_SHIFT);
 
-    Page *pg_iter = phys_to_page(start), \
-         *pg_end = phys_to_page(end);
+    Page *pg_iter = virt_to_page(start), \
+         *pg_end = virt_to_page(end);
 
     while (pg_iter != pg_end) {
         pg_iter->flags = PAGE_FLAG_RSVD;
@@ -101,7 +101,7 @@ static inline void add_fa(FreeArea *fa, int8_t order)
 void buddy_init()
 {
     Page *pg_iter = mem_map, \
-         *pg_end = mem_map + gb_pgcnt;
+         *pg_end  = mem_map + gb_pgcnt;
 
     while (1)
     {
@@ -129,7 +129,7 @@ void buddy_init()
             start_pg->order = order;
             start_pg->flags = PAGE_FLAG_FREED;
 
-            FreeArea *fa = (void *)page_to_phys(start_pg);
+            FreeArea *fa = (void *)page_to_virt(start_pg);
             add_fa(fa, order);
 
             start_pg += (1 << order);
@@ -173,7 +173,7 @@ void* buddy_alloc(uint32_t req_pgcnt)
     void *ret = free_area[curr_order];
     del_fa(free_area[curr_order], curr_order);
 
-    Page *pg = phys_to_page(ret);
+    Page *pg = virt_to_page(ret);
     
     /* Need to split buddy */
     while (order < curr_order)
@@ -186,7 +186,7 @@ void* buddy_alloc(uint32_t req_pgcnt)
         Page *next_pg = pg + (1 << curr_order);
         next_pg->order = curr_order;
 
-        FreeArea *fa = (void *)page_to_phys(next_pg);
+        FreeArea *fa = (void *)page_to_virt(next_pg);
         LIST_INIT(fa->list);
         add_fa(fa, next_pg->order);
     }
@@ -207,7 +207,7 @@ int32_t buddy_free(void *chk)
     printf("[DEBUG] Free to buddy\r\n");
     #endif /* DEBUG_MM */
 
-    Page *pg = phys_to_page(chk);
+    Page *pg = virt_to_page(chk);
     if ( (pg->order == PAGE_ORDER_UND || pg->flags == PAGE_FLAG_RSVD)  || /* reserved memory */
          (pg->order == PAGE_ORDER_BODY || pg->flags == PAGE_FLAG_BODY) || /* body */
           pg->flags == PAGE_FLAG_FREED /* head has been freed */)
@@ -228,7 +228,7 @@ int32_t buddy_free(void *chk)
         #ifdef DEBUG_MM
         printf("[DEBUG] Consolidate with right buddy 0x%x, order 0x%x --> 0x%x\r\n", pg->order, pg->order+1);
         #endif /* DEBUG_MM */
-        del_fa((FreeArea *)page_to_phys(merged_chk), pg->order);
+        del_fa((FreeArea *)page_to_virt(merged_chk), pg->order);
 
         merged_chk->order = PAGE_ORDER_BODY;
         merged_chk->flags = PAGE_FLAG_BODY;
@@ -248,7 +248,7 @@ int32_t buddy_free(void *chk)
         #ifdef DEBUG_MM
             printf("[DEBUG] Consolidate with left buddy, order 0x%x --> 0x%x\r\n", pg->order, pg->order+1);
         #endif /* DEBUG_MM */
-        del_fa((FreeArea *)page_to_phys(merged_chk), curr_order);
+        del_fa((FreeArea *)page_to_virt(merged_chk), curr_order);
 
         prev_merged_chk->order = PAGE_ORDER_BODY;
         prev_merged_chk->flags = PAGE_FLAG_BODY;
@@ -259,7 +259,7 @@ int32_t buddy_free(void *chk)
     }
 
     prev_merged_chk->flags = PAGE_FLAG_FREED;
-    add_fa((FreeArea *)page_to_phys(prev_merged_chk), curr_order);
+    add_fa((FreeArea *)page_to_virt(prev_merged_chk), curr_order);
 
     buddy_lock = 0;
     return 0;
