@@ -77,9 +77,7 @@ run_boot:
 ROOTFS = rootfs
 .PHONY: new_cpio
 new_cpio:
-	make -C $(SCRIPT_DIR) user_program
-	cp $(SCRIPT_DIR)/user_program $(ROOTFS)
-	find $(ROOTFS)/ | cpio -o -H newc > initramfs.cpio
+	cd $(ROOTFS) && find . | cpio -o -H newc > ../initramfs.cpio
 
 .PHONY: clean
 clean:

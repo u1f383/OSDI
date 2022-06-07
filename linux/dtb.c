@@ -13,7 +13,7 @@ void dtb_init(void *_dtb_base)
     register_mem_reserve(dtb_base, dtb_end);
 }
 
-void parse_dtb(void(*callback)(char*, char*, char*, int))
+void parse_dtb(int(*callback)(char*, char*, char*, int))
 {
     if (dtb_base == NULL)
         return;
@@ -90,7 +90,8 @@ void parse_dtb(void(*callback)(char*, char*, char*, int))
             hangon();
         }
 
-        callback(node_name, prop_name, prop_value_ptr, prop_len);
+        if (callback(node_name, prop_name, prop_value_ptr, prop_len) == 1)
+            return;
     }
 
 parse_dtb_ret:

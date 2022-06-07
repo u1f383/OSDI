@@ -1,5 +1,5 @@
-#ifndef _TXRX_TXRX_H_
-#define _TXRX_TXRX_H_
+#ifndef _TXRX_H_
+#define _TXRX_H_
 
 #include <types.h>
 
@@ -65,4 +65,4 @@ static inline uint8_t calc_checksum(const unsigned char *data, uint32_t sz)
     return sum;
 }
 
-#endif /* _TXRX_TXRX_H_ */
+#endif /* _TXRX_H_ */

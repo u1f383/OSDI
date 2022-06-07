@@ -13,6 +13,8 @@ static inline void update_timer()
     enable_timer();
 }
 
+pgd_t *next_pgd;
+
 /* Thread 0 is main thread */
 TaskStruct *main_task;
 TaskQueue rq, eq;
@@ -36,8 +38,8 @@ TaskStruct *new_task()
 {
     TaskStruct *task = kmalloc(sizeof(TaskStruct));
     memset(task, 0, sizeof(TaskStruct));
-    task->time = 1;
     LIST_INIT(task->list);
+    task->time = 1;
     return task;
 }
 
@@ -54,7 +56,7 @@ void schedule()
         next = container_of(next->list.next, TaskStruct, list);
 
     update_timer();
-    switch_to(current, next);
+    switch_to(current, next, virt_to_phys(next->mm->pgd));
 
     enable_intr();
 }
@@ -77,6 +79,10 @@ void main_thread_init()
     main_task->prio = 1;
     main_task->user_stack = 0;
     main_task->kern_stack = (void *)kern_end;
+    main_task->mm = kmalloc(sizeof(mm_struct));
+    main_task->mm->pgd = (pgd_t *)spin_table_start;
+    main_task->mm->mmap = NULL;
+
     LIST_INIT(main_task->list);
     
     disable_intr();
@@ -123,7 +129,8 @@ void thread_release(TaskStruct *target, int16_t ec)
     if (target == current) {
         disable_intr();
         update_timer();
-        switch_to(target, next);
+        next_pgd = (pgd_t *)virt_to_phys(next->mm->pgd);
+        switch_to(current, next, virt_to_phys(next->mm->pgd));
     }
 }
 
@@ -137,6 +144,10 @@ uint32_t create_kern_task(void(*func)(), void *arg)
 {
     TaskStruct *task = new_task();
     ThreadInfo *thread_info = &task->thread_info;
+    
+    task->mm = kmalloc(sizeof(mm_struct));
+    memset(task->mm, 0, sizeof(mm_struct));
+    task->mm->pgd = (pgd_t *)spin_table_start;
 
     task->pid = 0;
     task->status = STOPPED;
@@ -161,22 +172,33 @@ uint32_t create_kern_task(void(*func)(), void *arg)
     return 0;
 }
 
-uint32_t create_user_task(void(*prog)())
+uint32_t create_user_task(CpioHeader cpio_obj)
 {
     TaskStruct *task = new_task();
     ThreadInfo *thread_info = &task->thread_info;
+    mm_struct *mm = kmalloc(sizeof(mm_struct));
+    
+    memset(mm, 0, sizeof(mm_struct));
+    mm->pgd = buddy_alloc(1);
+    memset(mm->pgd, 0, PAGE_SIZE);
 
+    task->mm = mm;
     task->pid = _currpid++;
     task->status = STOPPED;
     task->prio = 2;
 
-    thread_info->x19 = (uint64_t)prog;
-    
-    thread_info->x20 = (uint64_t) kmalloc(THREAD_STACK_SIZE);
-    task->user_stack = (void *)thread_info->x20;
-    thread_info->x20 += THREAD_STACK_SIZE - 8;
+    uint64_t prog_size = (cpio_obj.c_filesize + 0xfff) & ~0xfff;
+    task->prog = buddy_alloc(prog_size >> PAGE_SHIFT);
+    memcpy(task->prog, cpio_obj.content, cpio_obj.c_filesize);
 
-    thread_info->sp = (uint64_t) kmalloc(THREAD_STACK_SIZE);
+    mappages(mm->pgd, 0x0, prog_size, virt_to_phys(task->prog));
+    thread_info->x19 = 0; /* User code at 0x0 */
+    
+    task->user_stack = buddy_alloc(THREAD_STACK_SIZE >> PAGE_SHIFT);
+    mappages(mm->pgd, 0xffffffffb000, THREAD_STACK_SIZE, virt_to_phys(task->user_stack));
+    thread_info->x20 = 0xffffffffb000 + THREAD_STACK_SIZE - 8;
+
+    thread_info->sp = (uint64_t)kmalloc(THREAD_STACK_SIZE);
     task->kern_stack = (void *)thread_info->sp;
     thread_info->sp += THREAD_STACK_SIZE - 8;
     thread_info->fp = thread_info->sp;
@@ -219,9 +241,18 @@ void kill_zombies()
         iter = container_of(iter->list.next, TaskStruct, list);
 
         list_del(&prev->list);
-        if (prev->user_stack != NULL)
+        if (prev->user_stack)
             kfree(prev->user_stack);
         kfree(prev->kern_stack);
+        kfree(prev->mm);
+
+        if (prev->mm->pgd)
+            kfree(prev->mm->pgd);
+
+        if (prev->mm->mmap) {
+            /* TODO */
+        }
+        kfree(prev->prog);
         kfree(prev);
         eq.len--;
     }

@@ -38,11 +38,11 @@ _kernel:
 #define PD_BLOCK 0b01
 #define PD_TBENT 0b11
 
-#define PD_ACCESS (1 << 10)
+#define AF_ACCESS (1 << 10)
 # | AF (access flag, bit[10]) | AttrIndx (bit[4:2]) | Table descriptor type[1:0]
-#define BOOT_PMD_RAM_ATTR   (PD_ACCESS | (MAIR_IDX_NORMAL_NOCACHE << 2) | PD_BLOCK)
-#define BOOT_PMD_PERIF_ATTR (PD_ACCESS | (MAIR_IDX_DEVICE_nGnRnE << 2) | PD_BLOCK)
-#define PERIF_BOOT_PUD_ATTR (PD_ACCESS | (MAIR_IDX_DEVICE_nGnRnE << 2) | PD_BLOCK)
+#define BOOT_PMD_RAM_ATTR   (AF_ACCESS | (MAIR_IDX_NORMAL_NOCACHE << 2) | PD_BLOCK)
+#define BOOT_PMD_PERIF_ATTR (AF_ACCESS | (MAIR_IDX_DEVICE_nGnRnE << 2) | PD_BLOCK)
+#define PERIF_BOOT_PUD_ATTR (AF_ACCESS | (MAIR_IDX_DEVICE_nGnRnE << 2) | PD_BLOCK)
 
 page_table_setup:
     # Set TG0 to 4KB (0b00) and T0SZ to 16
@@ -58,26 +58,26 @@ page_table_setup:
 
     # PGD's page frame at 0x0
     mov x0, 0
-    # PUD's page frame at 0x1000
+    # 1st PGD entry
     mov x1, 0x1000
-
-    # Combine the physical address of next level page with attribute
     ldr x2, =PD_TABLE
     orr x2, x1, x2
     str x2, [x0]
 
-    ldr x2, =PD_TABLE
+    # 1st PUD entry
     mov x3, 0x2000
+    ldr x2, =PD_TABLE
     orr x3, x2, x3
     str x3, [x1]
 
+    # 2nd PUD entry
     ldr x2, =PERIF_BOOT_PUD_ATTR
     mov x3, 0x40000000
     orr x3, x2, x3
     str x3, [x1, #8]
 
+    # setup PMD
     mov x1, 0x2000
-    
     ldr x2, =BOOT_PMD_RAM_ATTR
     mov x3, 0x00000000
     mov x4, 0x3B400000
@@ -99,7 +99,6 @@ setup_perif_page:
     b.lt setup_perif_page
 
     # Load PGD to the bottom translation-based register
-    # Use identity paging temporarily
     msr ttbr0_el1, x0
     # Also load PGD to the upper translation based register
     msr ttbr1_el1, x0
@@ -110,6 +109,10 @@ setup_perif_page:
     msr sctlr_el1, x2
 
 boot_rest:
+    # Update exception vector base
+    ldr x0, =exception_handler_table
+    msr vbar_el1, x0
+
     # Run kernel
     mov x0, x15
     ldr x2, =kernel

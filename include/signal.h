@@ -1,5 +1,5 @@
-#ifndef _LINUX_SIGNAL_H_
-#define _LINUX_SIGNAL_H_
+#ifndef _SIGNAL_H_
+#define _SIGNAL_H_
 
 #include <types.h>
 #include <list.h>
@@ -32,4 +32,4 @@ extern void (*default_sighand[])(int);
 
 #define SIGNAL_NUM (sizeof(default_sighand) / sizeof(default_sighand[0]))
 
-#endif /* _LINUX_SIGNAL_H_ */
+#endif /* _SIGNAL_H_ */

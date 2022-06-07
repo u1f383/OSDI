@@ -1,5 +1,6 @@
-#ifndef _LINUX_MM_H_
-#define _LINUX_MM_H_
+#ifndef _MM_H_
+#define _MM_H_
+
 #include <types.h>
 #include <list.h>
 
@@ -18,16 +19,19 @@
 #define page_to_phys(_page)      pfn_to_phys( page_to_pfn(_page) )
 #define page_to_virt(_page)      pfn_to_virt( page_to_pfn(_page) )
 #define phys_to_page(_phys_addr) pfn_to_page( phys_to_pfn(_phys_addr) )
-#define virt_to_page(_phys_addr) pfn_to_page( phys_to_pfn((uint64_t)_phys_addr - MM_VIRT_KERN_START) )
+#define virt_to_page(_virt_addr) pfn_to_page( phys_to_pfn(((uint64_t)_virt_addr) - MM_VIRT_KERN_START) )
+
+#define virt_to_phys(_virt_addr) (((uint64_t)_virt_addr) - MM_VIRT_KERN_START)
+#define phys_to_virt(_phys_addr) (((uint64_t)_phys_addr) + MM_VIRT_KERN_START)
 
 #define align_page(phys) ( (phys + ((1 << PAGE_SHIFT) - 1)) & ~((1 << PAGE_SHIFT) - 1) )
 
 #define spin_table_start 0xFFFF000000000000
 #define spin_table_end   0xFFFF000000003000
-#define kern_start   0xFFFF000000080000
-#define kern_end     0xFFFF000000100000
-#define su_rsvd_base 0xFFFF000000100000
-#define su_rsvd_size 0x100000
+#define kern_start       0xFFFF000000080000
+#define kern_end         0xFFFF000000100000
+#define su_rsvd_start    0xFFFF000000100000
+#define su_rsvd_end      0xFFFF000000200000
 
 extern uint64_t phys_mem_end;
 
@@ -52,8 +56,8 @@ typedef struct _FreeArea {
 
 static const uint32_t slab_size_pool[] = \
 {
-    16, 32, 48, 96, 128, 256, 512, 1024,
-    2048, 3072, 4096, 8192, 16384, 32768, 65536
+    0x10, 0x20, 0x30, 0x60, 0x80, 0x100, 0x200, 0x400,
+    0x800, 0x1000, 0x2000, 0x3000, 0x4000, 0x6000, 0x8000
 };
 
 #define SLAB_POOL_SIZE (sizeof(slab_size_pool) / sizeof(slab_size_pool[0]))
@@ -81,6 +85,4 @@ void* kmalloc(uint32_t sz);
 int32_t kfree(void *chk);
 int32_t buddy_free(void *chk);
 
-
-
-#endif /* _ARM_MM_H_ */
+#endif /* _MM_H_ */

@@ -14,7 +14,7 @@ typedef struct _RsvdMem {
 const RsvdMem user_rsvd_memory[] = {
     { spin_table_start, spin_table_end },
     { kern_start, kern_end },
-    { su_rsvd_base, su_rsvd_base + su_rsvd_size },
+    { su_rsvd_start, su_rsvd_end },
 };
 
 uint64_t phys_mem_start = 0, \
@@ -33,8 +33,8 @@ static bool slab_lock = 0;
 /**
  * ============ startup allocator ============
  */
-char *su_head = (char *)su_rsvd_base;
-char *su_tail = (char *)(su_rsvd_base + su_rsvd_size);
+static char *su_head = (char *)su_rsvd_start,
+            *su_tail = (char *)su_rsvd_end;
 char *startup_alloc(uint32_t sz)
 {
     if (su_head + sz >= su_tail)

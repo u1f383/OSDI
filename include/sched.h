@@ -1,13 +1,14 @@
-#ifndef _LINUX_SCHED_H_
-#define _LINUX_SCHED_H_
+#ifndef _SCHED_H_
+#define _SCHED_H_
 
 #include <types.h>
 #include <list.h>
 #include <irq.h>
 #include <signal.h>
 #include <initramfs.h>
+#include <vm.h>
 
-#define THREAD_STACK_SIZE 0x2000
+#define THREAD_STACK_SIZE 0x4000
 #define current get_current()
 
 typedef struct _TrapFrame {
@@ -82,6 +83,9 @@ typedef struct _TaskStruct {
     Signal *signal;
     SignalCtx *signal_ctx;
     uint8_t signal_queue;
+
+    mm_struct *mm;
+    void *prog;
 } TaskStruct;
 
 typedef struct _TaskQueue {
@@ -106,17 +110,17 @@ void try_schedule();
 void schedule();
 void idle();
 void kill_zombies();
-void switch_to(TaskStruct *curr, TaskStruct *next);
+void switch_to(TaskStruct *curr, TaskStruct *next, pgd_t next_pgd);
 void main_thread_init();
 void thread_release(TaskStruct *curr, int16_t ec);
 void call_sigreturn();
 
 uint32_t create_kern_task(void(*prog)(), void *arg);
-uint32_t create_user_task(void(*prog)());
+uint32_t create_user_task(CpioHeader cpio_obj);
 
 void thread_trampoline(void(*func)(void *), void *arg);
 void __thread_trampoline();
 void from_el1_to_el0();
 void fork_handler();
 
-#endif /* _LINUX_SCHED_H_ */
+#endif /* _SCHED_H_ */

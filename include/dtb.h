@@ -1,5 +1,5 @@
-#ifndef _INIT_DTB_H_
-#define _INIT_DTB_H_
+#ifndef _DTB_H_
+#define _DTB_H_
 
 #include <util.h>
 
@@ -35,7 +35,7 @@ typedef struct _Fdt_rsv_entry
     uint64_t size;
 } Fdt_rsv_entry;
 
-void parse_dtb(void (*func)());
+void parse_dtb(int(*callback)(char*, char*, char*, int));
 void dtb_init(void *_dtb_base);
 
-#endif /* _KERNEL_DTB_H_ */
+#endif /* _DTB_H_ */

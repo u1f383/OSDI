@@ -4,6 +4,7 @@
 #include <printf.h>
 #include <gpio.h>
 #include <mm.h>
+#include <vm.h>
 #include <sched.h>
 #include <util.h>
 
@@ -27,7 +28,7 @@ void foo()
     }
 }
 
-void cpio_init_cb(char *node_name, char *prop_name, char *value, int len)
+int cpio_init_cb(char *node_name, char *prop_name, char *value, int len)
 {
     if (prop_name) {
         if (!strcmp(prop_name, "linux,initrd-start"))
@@ -38,8 +39,12 @@ void cpio_init_cb(char *node_name, char *prop_name, char *value, int len)
             phys_mem_end = endian_xchg_32(*(uint32_t *)value);
     }
 
-    if (cpio_start && cpio_end)
+    if (cpio_start && cpio_end) {
         register_mem_reserve(cpio_start, cpio_end);
+        return 1;
+    }
+
+    return 0;
 }
 
 static inline void counter_timer_init()
@@ -69,16 +74,14 @@ void kernel(void *dtb_base)
 
     printf("boot_time: %x\r\n", boot_time);
 
-    for (int i = 0; i < 3; i++)
-        create_kern_task(foo, NULL);
+    // for (int i = 0; i < 3; i++)
+    //     create_kern_task(foo, NULL);
 
-    // CpioHeader cpio_obj;
-    // if (cpio_find_file("syscall.img", &cpio_obj) != 0)
-    //     hangon();
+    CpioHeader cpio_obj;
+    if (cpio_find_file("./vm.img", &cpio_obj) != 0)
+        hangon();
 
-    // void(*program)() = (void (*)())kmalloc(cpio_obj.c_filesize);
-    // memcpy(program, cpio_obj.content, cpio_obj.c_filesize);
-    // create_user_task(program);
+    create_user_task(cpio_obj);
 
     idle();
 }

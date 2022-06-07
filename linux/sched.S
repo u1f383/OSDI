@@ -18,6 +18,18 @@ switch_to:
     ldr x9, [x1, 16 * 6]
     mov sp,  x9
     msr tpidr_el1, x1
+
+    # Ensure write has completed
+    dsb ish
+    # Switch translation based address
+    msr ttbr0_el1, x2
+    # Invalidate all TLB entries
+    tlbi vmalle1is
+    # Ensure completion of TLB invalidatation
+    dsb ish
+    # Clear pipeline
+    isb
+
     ret
 
 .global get_current
