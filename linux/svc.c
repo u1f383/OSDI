@@ -1,3 +1,5 @@
+#include <initramfs.h>
+#include <fs.h>
 #include <types.h>
 #include <irq.h>
 #include <gpio.h>
@@ -5,7 +7,6 @@
 #include <sched.h>
 #include <signal.h>
 #include <mm.h>
-#include <initramfs.h>
 
 int svc_getpid();
 int svc_mbox_call(unsigned char ch, unsigned int *mbox);
@@ -16,17 +17,26 @@ void svc_test();
 
 void *svc_table[] =
 {
-    svc_getpid,
-    svc_uartread,
-    svc_uartwrite,
-    svc_exec,
-    svc_fork,
-    svc_exit,
-    svc_mbox_call,
-    svc_kill,
-    svc_signal,
-    svc_sigkill,
-    svc_sigreturn,
+    svc_getpid, // 0
+    svc_uartread, // 1
+    svc_uartwrite, // 2
+    svc_exec, // 3
+    svc_fork, // 4
+    svc_exit, // 5
+    svc_mbox_call, // 6
+    svc_kill, // 7
+    svc_signal, // 8
+    svc_sigkill, // 9
+    svc_sigreturn, // 10
+    svc_open, // 11
+    svc_close, // 12
+    svc_write, // 13
+    svc_read, // 14
+    svc_mkdir, // 15
+    svc_mount, // 16
+    svc_chdir, // 17
+    svc_lseek64, // 18
+    svc_ioctl, // 19
 };
 
 #define SVC_NUM (sizeof(svc_table) / sizeof(svc_table[0]))

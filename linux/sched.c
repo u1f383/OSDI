@@ -6,6 +6,7 @@
 #include <util.h>
 #include <types.h>
 #include <initramfs.h>
+#include <fs.h>
 
 static inline void update_timer()
 {
@@ -177,6 +178,11 @@ uint32_t create_user_task(CpioHeader cpio_obj)
     ThreadInfo *thread_info = &task->thread_info;
     mm_struct *mm = kmalloc(sizeof(mm_struct));
     
+    task->fdt = kmalloc(sizeof(struct fdt_struct));
+    memset(task->fdt, 0, sizeof(struct fdt_struct));
+
+    task->workdir = rootfs->root;
+    
     memset(mm, 0, sizeof(mm_struct));
     mm->pgd = buddy_alloc(1);
     memset(mm->pgd, 0, PAGE_SIZE);
@@ -248,8 +254,13 @@ void kill_zombies()
         if ((uint64_t)prev->mm->pgd != spin_table_start)
             release_pgtable(prev->mm->pgd, 0);
 
-        if (prev->mm->mmap) { /* TODO */ }
+        if (prev->mm->mmap) {
+            /* TODO */
+        }
         kfree(prev->mm);
+
+        if (prev->fdt)
+            kfree(prev->fdt);
         
         if (prev->prog)
             kfree(prev->prog);
@@ -274,6 +285,8 @@ int32_t svc_fork()
     TrapFrame *tf = (void *)read_normreg(x8);
     TaskStruct *task = new_task();
     mm_struct *mm = kmalloc(sizeof(mm_struct));
+
+    task->workdir = current->workdir;
 
     memset(mm, 0, sizeof(mm_struct));
     mm->pgd = buddy_alloc(1);
@@ -331,10 +344,13 @@ int32_t svc_exec(const char *name, char *const argv[])
 {
     TrapFrame *tf = (void *)read_normreg(x8);
     CpioHeader cpio_obj;
+    
     if (cpio_find_file(name, &cpio_obj) != 0)
         return -1;
 
-    /* TODO reallocate prog memory */
+    /* TODO: reallocate prog memory */
+
+    current->workdir = rootfs->root;
     current->pid = _currpid++;
     tf->x30 = (uint64_t)current->prog;
     tf->sp_el0 = (tf->sp_el0 & (THREAD_STACK_SIZE - 1)) + THREAD_STACK_SIZE - 0x10;

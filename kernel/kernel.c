@@ -1,4 +1,5 @@
 #include <initramfs.h>
+#include <tmpfs.h>
 #include <irq.h>
 #include <dtb.h>
 #include <printf.h>
@@ -71,17 +72,18 @@ void kernel(void *dtb_base)
     counter_timer_init();
     task_queue_init();
     main_thread_init();
+    register_filesystem(&tmpfs);
 
     printf("boot_time: %x\r\n", boot_time);
 
     // for (int i = 0; i < 3; i++)
     //     create_kern_task(foo, NULL);
 
-    CpioHeader cpio_obj;
-    if (cpio_find_file("./vm.img", &cpio_obj) != 0)
-        hangon();
+    // CpioHeader cpio_obj;
+    // if (cpio_find_file("./vm.img", &cpio_obj) != 0)
+    //     hangon();
 
-    create_user_task(cpio_obj);
+    // create_user_task(cpio_obj);
 
     idle();
 }

@@ -6,6 +6,7 @@
 #include <irq.h>
 #include <signal.h>
 #include <initramfs.h>
+#include <fs.h>
 #include <vm.h>
 
 #define THREAD_STACK_SIZE 0x4000
@@ -87,6 +88,9 @@ typedef struct _TaskStruct {
     mm_struct *mm;
     void *prog;
     uint32_t prog_size;
+
+    struct fdt_struct *fdt;
+    struct vnode *workdir;
 } TaskStruct;
 
 typedef struct _TaskQueue {
