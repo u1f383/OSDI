@@ -42,13 +42,13 @@ void mappages(void *pgd, uint64_t va, uint64_t size, uint64_t pa)
         if (pgcnt == 0)
             break;
 
-        for (int level = 3; level > 0 && pgtable_idx[level] >= 512; level++) {
+        for (int level = 3; level > 0 && pgtable_idx[level] >= 512; level--) {
             pgtable_idx[level] = 0;
             pgtable_idx[level-1]++;
             update = 1;
         }
 
-        for (int level = 0; level < 3 && update; level--) {
+        for (int level = 0; level < 3 && update; level++) {
             if (*((uint64_t *)pgtables[level] + pgtable_idx[level]) == 0) {
                 page = buddy_alloc(1);
                 memset(page, 0, PAGE_SIZE);
@@ -57,4 +57,34 @@ void mappages(void *pgd, uint64_t va, uint64_t size, uint64_t pa)
             pgtables[level+1] = (void *) phys_to_virt(*((uint64_t *)pgtables[level] + pgtable_idx[level]) & ~0b11);
         }
     } while (1);
+}
+
+pte_t *walk(void *pagetable, uint64_t va)
+{
+    uint32_t pgtable_idx[4] = {
+        va >> PGD_BIT,
+        va >> PUD_BIT & ((1 << GRANULE_SIZE) - 1),
+        va >> PMD_BIT & ((1 << GRANULE_SIZE) - 1),
+        va >> PTE_BIT & ((1 << GRANULE_SIZE) - 1),
+    };
+
+    for (int level = 0; level < 3; level++) {
+        pagetable = (void *)phys_to_virt(*((uint64_t *)pagetable + pgtable_idx[level]) & ~0b11);
+        if (pagetable == NULL)
+            return NULL;
+    }
+
+    return *((pte_t **)pagetable + pgtable_idx[3]);
+}
+
+void release_pgtable(void *pagetable, int level)
+{
+    for (int i = 0; i < 512; i++) {
+        if (*((uint64_t *)pagetable + i) != NULL) {
+            void *page = (void *)phys_to_virt(*((uint64_t *)pagetable + i) & ~0xfff);
+            if (level != 3)
+                release_pgtable(page, level+1);
+            kfree(page);
+        }
+    }
 }

@@ -1,5 +1,8 @@
 #include <gpio.h>
 #include <util.h>
+#include <vm.h>
+#include <mm.h>
+#include <sched.h>
 
 #define UART_BUF_SIZE 0x400
 
@@ -147,13 +150,14 @@ int async_uart_recv_num(char *buf, int num)
 {
     while (num)
     {
-        if (IS_RX_EMPTY)
+        if (IS_RX_EMPTY) {
+            enable_rx_intr();
             continue;
+        }
         
         *buf = uart_rx_rb[uart_rx_tail];
         uart_rx_tail = (uart_rx_tail+1) % UART_BUF_SIZE;
         num--;
-        enable_rx_intr();
     }
 
     return 1;
@@ -198,16 +202,31 @@ int async_uart_send_num(const char *buf, int num)
 
 #define MAILBOX0_CHANNEL_PROPERTYTAGS_ARMVC 0x8
 
+#define MAILBOX_ALLOC_BUFFER 0x40001
+
 int mailbox_call(uint32_t channel, volatile uint32_t *mbox)
 {
+
+    pte_t *pte = (pte_t *)walk(current->mm->pgd, (uint64_t)mbox & ~0xfff);
+    if (pte == NULL)
+        hangon();
+
+    pte = (void *)(((uint64_t)pte & ~0xfff) + ((uint64_t)mbox & 0xfff));
     uint32_t magic = (channel & MAILBOX_CHANNEL_MASK) |
-                     ((uint32_t)((uint64_t) mbox & MAILBOX_DATA_MASK));
+                     ((uint32_t)(uint64_t)pte & MAILBOX_DATA_MASK);
     /* Wait for mailbox not full */
     while (*MAILBOX0_STATUS & MAILBOX_STATUS_FULL);
     /* Pass message to GPU */
     *MAILBOX1_WRITE = magic;
     /* Wait for mailbox not empty */
     while (*MAILBOX0_STATUS & MAILBOX_STATUS_EMPTY);
+
+    for (int i = 0; i < mbox[0] / 4; i++) {
+        if (mbox[i] == MAILBOX_ALLOC_BUFFER) {
+            mappages(current->mm->pgd, mbox[i+3], mbox[i+4], mbox[i+3]);
+            break;
+        }
+    }
 
     return *MAILBOX0_READ == magic;
 }

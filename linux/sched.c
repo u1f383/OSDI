@@ -57,8 +57,6 @@ void schedule()
 
     update_timer();
     switch_to(current, next, virt_to_phys(next->mm->pgd));
-
-    enable_intr();
 }
 
 void try_schedule()
@@ -132,6 +130,7 @@ void thread_release(TaskStruct *target, int16_t ec)
         next_pgd = (pgd_t *)virt_to_phys(next->mm->pgd);
         switch_to(current, next, virt_to_phys(next->mm->pgd));
     }
+    /* Never reach */
 }
 
 void thread_trampoline(void(*func)(), void *arg)
@@ -159,7 +158,7 @@ uint32_t create_kern_task(void(*func)(), void *arg)
     
     thread_info->sp = (uint64_t)kmalloc(THREAD_STACK_SIZE);
     task->kern_stack = (void *)thread_info->sp;
-    thread_info->sp += THREAD_STACK_SIZE - 8;
+    thread_info->sp += THREAD_STACK_SIZE - 0x10;
     thread_info->fp = thread_info->sp;
 
     thread_info->lr = (uint64_t)__thread_trampoline;
@@ -187,20 +186,21 @@ uint32_t create_user_task(CpioHeader cpio_obj)
     task->status = STOPPED;
     task->prio = 2;
 
-    uint64_t prog_size = (cpio_obj.c_filesize + 0xfff) & ~0xfff;
-    task->prog = buddy_alloc(prog_size >> PAGE_SHIFT);
+    task->prog_size = (cpio_obj.c_filesize + 0xfff) & ~0xfff;
+    task->prog = buddy_alloc(task->prog_size >> PAGE_SHIFT);
     memcpy(task->prog, cpio_obj.content, cpio_obj.c_filesize);
 
-    mappages(mm->pgd, 0x0, prog_size, virt_to_phys(task->prog));
+    mappages(mm->pgd, 0x0, task->prog_size, virt_to_phys(task->prog));
     thread_info->x19 = 0; /* User code at 0x0 */
     
     task->user_stack = buddy_alloc(THREAD_STACK_SIZE >> PAGE_SHIFT);
+    memset(task->user_stack, 0, THREAD_STACK_SIZE);
     mappages(mm->pgd, 0xffffffffb000, THREAD_STACK_SIZE, virt_to_phys(task->user_stack));
-    thread_info->x20 = 0xffffffffb000 + THREAD_STACK_SIZE - 8;
+    thread_info->x20 = 0xffffffffb000 + THREAD_STACK_SIZE - 0x10;
 
     thread_info->sp = (uint64_t)kmalloc(THREAD_STACK_SIZE);
     task->kern_stack = (void *)thread_info->sp;
-    thread_info->sp += THREAD_STACK_SIZE - 8;
+    thread_info->sp += THREAD_STACK_SIZE - 0x10;
     thread_info->fp = thread_info->sp;
 
     thread_info->lr = (uint64_t)from_el1_to_el0;
@@ -244,15 +244,16 @@ void kill_zombies()
         if (prev->user_stack)
             kfree(prev->user_stack);
         kfree(prev->kern_stack);
+
+        if ((uint64_t)prev->mm->pgd != spin_table_start)
+            release_pgtable(prev->mm->pgd, 0);
+
+        if (prev->mm->mmap) { /* TODO */ }
         kfree(prev->mm);
-
-        if (prev->mm->pgd)
-            kfree(prev->mm->pgd);
-
-        if (prev->mm->mmap) {
-            /* TODO */
-        }
-        kfree(prev->prog);
+        
+        if (prev->prog)
+            kfree(prev->prog);
+        
         kfree(prev);
         eq.len--;
     }
@@ -272,26 +273,36 @@ int32_t svc_fork()
 {
     TrapFrame *tf = (void *)read_normreg(x8);
     TaskStruct *task = new_task();
+    mm_struct *mm = kmalloc(sizeof(mm_struct));
+
+    memset(mm, 0, sizeof(mm_struct));
+    mm->pgd = buddy_alloc(1);
+    memset(mm->pgd, 0, PAGE_SIZE);
+    task->mm = mm;
 
     task->pid = _currpid++;
     task->prio = current->prio;
     task->status = RUNNING;
 
-    int64_t usp_offset = tf->sp_el0 - (uint64_t)current->user_stack;
-    int64_t ufp_offset = tf->x29 - (uint64_t)current->user_stack;
+    task->prog_size = current->prog_size;
+    task->prog = buddy_alloc(current->prog_size >> PAGE_SHIFT);
+    memcpy(task->prog, current->prog, current->prog_size);
+    mappages(mm->pgd, 0x0, task->prog_size, virt_to_phys(task->prog));
 
-    task->user_stack = kmalloc(THREAD_STACK_SIZE);
+    task->user_stack = buddy_alloc(THREAD_STACK_SIZE >> PAGE_SHIFT);
+    mappages(mm->pgd, 0xffffffffb000, THREAD_STACK_SIZE, virt_to_phys(task->user_stack));
+
     task->kern_stack = kmalloc(THREAD_STACK_SIZE);
-
     memcpy(task->user_stack, current->user_stack, THREAD_STACK_SIZE);
     memcpy(task->kern_stack, current->kern_stack, THREAD_STACK_SIZE);
 
+    int64_t ufp_offset = tf->x29 - (uint64_t)current->user_stack;
     uint64_t tf_offset = (uint64_t)tf - (uint64_t)current->kern_stack;
-    task->thread_info.lr = (uint64_t)fork_handler;
+    task->thread_info.lr = (uint64_t)fork_trampoline;
     task->thread_info.sp = (uint64_t)task->kern_stack + tf_offset; // new trap frame
     task->thread_info.fp = (uint64_t)task->kern_stack + ufp_offset;
     task->thread_info.x19 = tf->x30;
-    task->thread_info.x20 = (uint64_t)task->user_stack + usp_offset;
+    task->thread_info.x20 = tf->sp_el0;
 
     if (current->signal != NULL)
     {
@@ -323,12 +334,10 @@ int32_t svc_exec(const char *name, char *const argv[])
     if (cpio_find_file(name, &cpio_obj) != 0)
         return -1;
 
-    char *syscall_img = (char *)kmalloc(cpio_obj.c_filesize);
-    memcpy(syscall_img, cpio_obj.content, cpio_obj.c_filesize);
-
+    /* TODO reallocate prog memory */
     current->pid = _currpid++;
-    tf->x30 = (uint64_t)syscall_img;
-    tf->sp_el0 = (uint64_t)current->user_stack + THREAD_STACK_SIZE - 8;
+    tf->x30 = (uint64_t)current->prog;
+    tf->sp_el0 = (tf->sp_el0 & (THREAD_STACK_SIZE - 1)) + THREAD_STACK_SIZE - 0x10;
 
     return 0;
 }

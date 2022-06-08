@@ -34,6 +34,8 @@ typedef struct _mm_struct {
     pgd_t *pgd;
 } mm_struct;
 
+void release_pgtable(void *pagetable, int level);
 void mappages(void *pgd, uint64_t va, uint64_t size, uint64_t pa);
+pte_t *walk(void *pgd, uint64_t va);
 
 #endif /* _VM_H_ */

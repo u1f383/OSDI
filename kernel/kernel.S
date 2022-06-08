@@ -9,15 +9,6 @@ _kernel:
     mov x15, x0
     
     bl from_el2_to_el1
-    bl page_table_setup
-
-    # Setup exception vector table
-    ldr x0, =exception_handler_table
-    msr vbar_el1, x0
-
-    # Enable timer for ARM
-    mov x0, 1
-    msr cntp_ctl_el0, x0
 
 #define TCR_CONFIG_REGION_48bit (((64 - 48) << 0) | ((64 - 48) << 16))
 # 4KB granule with 48 bits:
@@ -109,9 +100,13 @@ setup_perif_page:
     msr sctlr_el1, x2
 
 boot_rest:
-    # Update exception vector base
+    # Setup exception vector table
     ldr x0, =exception_handler_table
     msr vbar_el1, x0
+
+    # Enable timer for ARM
+    mov x0, 1
+    msr cntp_ctl_el0, x0
 
     # Run kernel
     mov x0, x15
@@ -199,30 +194,37 @@ from_el2_to_el1:
 .balign 0x800
 exception_handler_table:
     # 0
-    bl dummy_handler
+dummy_handler0:
+    bl dummy_handler0
 .align 7
     # 1
-    bl dummy_handler
+dummy_handler1:
+    bl dummy_handler1
 .align 7
     # 2
-    bl dummy_handler
+dummy_handler2:
+    bl dummy_handler2
 .align 7
     # 3
-    bl dummy_handler
+dummy_handler3:
+    bl dummy_handler3
 
 # -------------------------
 .align 7
     # 4
-    bl dummy_handler
+dummy_handler4:
+    bl dummy_handler4
 .align 7
     # 5 - SP_ELx - IRQ
     b irq_handler_wrapper
 .align 7
     # 6
-    bl dummy_handler
+dummy_handler6:
+    bl dummy_handler6
 .align 7
     # 7
-    bl dummy_handler
+dummy_handler7:
+    bl dummy_handler7
 
 # -------------------------
 .align 7
@@ -233,29 +235,34 @@ exception_handler_table:
     b irq_handler_wrapper
 .align 7
     # 10
-    bl dummy_handler
+dummy_handler10:
+    bl dummy_handler10
 .align 7
     # 11
-    bl dummy_handler
+dummy_handler11:
+    bl dummy_handler11
 
 # -------------------------
 .align 7
     # 12
-    bl dummy_handler
+dummy_handler12:
+    bl dummy_handler12
 .align 7
     # 13
-    bl dummy_handler
+dummy_handler13:
+    bl dummy_handler13
 .align 7
     # 14
-    bl dummy_handler
+dummy_handler14:
+    bl dummy_handler14
 .align 7
     # 15
-    bl dummy_handler
+dummy_handler15:
+    bl dummy_handler15
 
 .align 7
-dummy_handler:
-    msr DAIFClr, 0xf
-
+dummy_handler_exception:
+    bl dummy_handler_exception
 svc_handler:
     save_registers
 
@@ -265,7 +272,7 @@ svc_handler:
     
     # If not SVC, do nothing
     cmp x1, 0x15
-    b.ne dummy_handler
+    b.ne dummy_handler_exception
 
     # Get syscall number
     mov x0, x8

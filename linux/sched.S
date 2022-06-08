@@ -30,6 +30,8 @@ switch_to:
     # Clear pipeline
     isb
 
+    # Enable interrupt
+    msr DAIFClr, 0xf
     ret
 
 .global get_current
@@ -58,8 +60,8 @@ __thread_trampoline:
     mov x1, x20
     b thread_trampoline
 
-.global fork_handler
-fork_handler:
+.global fork_trampoline
+fork_trampoline:
     msr elr_el1, x19
     msr sp_el0, x20
 

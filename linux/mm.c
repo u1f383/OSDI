@@ -241,7 +241,7 @@ int32_t buddy_free(void *chk)
     while (curr_order < PAGE_ORDER_MAX)
     {
         merged_chk = pg - (1 << curr_order);
-        if (merged_chk->order != curr_order &&
+        if (merged_chk->order != curr_order ||
             merged_chk->flags != PAGE_FLAG_FREED)
             break;
 

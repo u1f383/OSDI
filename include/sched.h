@@ -86,6 +86,7 @@ typedef struct _TaskStruct {
 
     mm_struct *mm;
     void *prog;
+    uint32_t prog_size;
 } TaskStruct;
 
 typedef struct _TaskQueue {
@@ -121,6 +122,6 @@ uint32_t create_user_task(CpioHeader cpio_obj);
 void thread_trampoline(void(*func)(void *), void *arg);
 void __thread_trampoline();
 void from_el1_to_el0();
-void fork_handler();
+void fork_trampoline();
 
 #endif /* _SCHED_H_ */

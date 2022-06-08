@@ -66,7 +66,7 @@ void sigctx_update(void *trap_frame, void (*handler)())
     
     tf->x30 = (uint64_t)call_sigreturn;
     tf->elr_el1 = (uint64_t)handler;
-    tf->sp_el0 = (uint64_t)((char *)signal_ctx->user_stack + THREAD_STACK_SIZE - 0x8);
+    tf->sp_el0 = (uint64_t)((char *)signal_ctx->user_stack + THREAD_STACK_SIZE - 0x10);
 }
 
 void try_signal_handle(void *trap_frame)

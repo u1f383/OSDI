@@ -24,7 +24,9 @@ typedef struct _BottomHalfJob
     int running;
     struct list_head list;
 } BottomHalfJob;
-
+#define BHJ_POOL_SIZE 0x10
+static BottomHalfJob bhj_pool[BHJ_POOL_SIZE];
+static uint16_t bhj_pool_bitmap = 0xffff;
 
 static struct list_head time_jobs_hdr = LIST_HEAD_INIT(time_jobs_hdr);
 static struct list_head bhj_hdr = LIST_HEAD_INIT(bhj_hdr);
@@ -45,9 +47,30 @@ TimeJob *new_time_job(void (*callback)(void*), void *arg, uint32_t duration)
     return time_job;
 }
 
+static BottomHalfJob *__alloc_bhj()
+{
+    for (int i = 0; i < BHJ_POOL_SIZE; i++) {
+        if (bhj_pool_bitmap & (1 << i)) {
+            bhj_pool_bitmap ^= (1 << i);
+            return &bhj_pool[i];
+        }
+    }
+    return NULL;
+}
+
+static void __free_bhj(BottomHalfJob *bhj)
+{
+    for (int i = 0; i < BHJ_POOL_SIZE; i++) {
+        if (bhj == &bhj_pool[i]) {
+            bhj_pool_bitmap |= (1 << i);
+            return;
+        }
+    }
+}
+
 BottomHalfJob *new_bhj(void (*callback)(void*), void *arg, int32_t prio)
 {
-    BottomHalfJob *bhj = kmalloc(sizeof(BottomHalfJob));
+    BottomHalfJob *bhj = __alloc_bhj();
     bhj->prio = prio;
     bhj->callback = callback;
     bhj->arg = arg;
@@ -156,16 +179,18 @@ void irq_handler()
 {
     uint32_t int_src = *(uint32_t *)CORE0_INTERRUPT_SRC;
     BottomHalfJob *bhj = NULL, *prev = NULL;
+
+    /* No more bottom half job */
+    if (!bhj_pool_bitmap)
+        hangon();
     
-    /* Timer handling - check if CNTPNSIRQ interrupt bit is set */
     if (int_src & 0b10) {
-        bhj = add_bhj(timer_intr_handler, NULL, 1);
         disable_timer();
+        bhj = add_bhj(timer_intr_handler, NULL, 1);
     } else if (aux_regs->mu_iir & 0b110) {
-        /* Mask UART interrupt */
+        disable_uart();
         bhj = add_bhj((void (*)(void*))uart_intr_handler,
                         (void *)(uint64_t)aux_regs->mu_ier, 2);
-        disable_uart();
     } else
         return;
 
@@ -186,5 +211,6 @@ void irq_handler()
         bhj = container_of(bhj->list.next, BottomHalfJob, list);
         
         list_del(&prev->list);
+        __free_bhj(prev);
     }
 }
