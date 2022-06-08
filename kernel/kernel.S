@@ -282,17 +282,19 @@ svc_handler:
 
     # load argument
     ldp x0, x1, [sp ,16 * 0]
+    ldp x2, x3, [sp ,16 * 1]
+    ldp x4, x5, [sp ,16 * 2]
 
     # Get the correspoding svc handler
-    ldr x4, =svc_table
-    ldr x2, [x4, x8, lsl#3]
+    ldr x7, =svc_table
+    ldr x9, [x7, x8, lsl#3]
     
     # Trick to get trap frame
     mov x8, sp
 
     # Enable interrupt
     msr DAIFClr, 0xf
-    blr x2
+    blr x9
     msr DAIFSet, 0xf
 
 svc_handler_ret:

@@ -44,6 +44,7 @@ struct vnode {
     const struct file_operations *f_ops;
     struct list_head list;
     uint8_t type;
+    uint64_t size;
 
     union
     {

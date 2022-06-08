@@ -19,7 +19,7 @@ int32_t cpio_find_file(const char *target, CpioHeader *cpio_obj)
     if (!cpio_start)
         return -1;
 
-    if (!memcmp((void *)cpio_start, CPIO_HEADER_MAGIC, 6))
+    if (memcmp((void *)cpio_start, CPIO_HEADER_MAGIC, 6))
         return -1;
 
     CpioHeader ramfs_header;

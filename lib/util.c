@@ -48,11 +48,12 @@ int memcmp(const void *s1, const void *s2, uint32_t sz)
 {
     const char *_s1 = (const char *)s1;
     const char *_s2 = (const char *)s2;
-    while (sz-- && *_s1 == *_s2) {
+    while (sz && *_s1 == *_s2) {
         _s1++;
         _s2++;
+        sz--;
     }
-    return *_s1 - *_s2;
+    return sz;
 }
 
 void memcpy(void *s1, const void *s2, uint32_t sz)

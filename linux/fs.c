@@ -43,7 +43,14 @@ static struct vnode *new_vnode(struct vnode *parent,
     vn->parent = parent;
     vn->type = type;
     vn->mount = NULL;
-    vn->internal.mem = NULL;
+    vn->size = 0;
+
+    if (type == FILE_NORM) {
+        vn->internal.mem = kmalloc(FILE_MAX_SIZE);
+        memset(vn->internal.mem, 0, FILE_MAX_SIZE);
+    } else
+        vn->internal.mem = NULL;
+    
     return vn;
 }
 
@@ -142,10 +149,12 @@ int vfs_write(struct file *file, const void *buf, uint64_t len)
         return -1;
 
     const char *ptr = buf;
-    int i;
+    uint64_t i;
     for (i = 0; i < len && file->f_pos < FILE_MAX_SIZE; i++, file->f_pos++)
         *(file->vnode->internal.mem + file->f_pos) = *ptr++;
 
+    if (file->f_pos > file->vnode->size)
+        file->vnode->size = file->f_pos;
     return i;
 }
 
@@ -155,8 +164,8 @@ int vfs_read(struct file *file, void *buf, uint64_t len)
         return -1;
 
     char *ptr = buf;
-    int i;
-    for (i = 0; i < len && file->f_pos < FILE_MAX_SIZE; i++, file->f_pos++)
+    uint64_t i;
+    for (i = 0; i < len && file->f_pos < file->vnode->size; i++, file->f_pos++)
         *ptr++ = *(file->vnode->internal.mem + file->f_pos);
 
     return i;
@@ -203,13 +212,16 @@ int vfs_lookup(struct vnode *dir_node, struct vnode **target,
     struct vnode *first_file = dir_node->internal.next_layer;
     struct vnode *fiter = first_file;
 
+    if (first_file == NULL)
+        return -1;
+
     do {
         if (!strcmp(fiter->component_name, component_name)) {
             *target = fiter;
             return 0;
         }
 
-        fiter = container_of(first_file->list.next, struct vnode, list);
+        fiter = container_of(fiter->list.next, struct vnode, list);
     } while (fiter != first_file);
 
     return -1;
@@ -221,7 +233,10 @@ int vfs_create(struct vnode *dir_node, struct vnode **target,
     struct vnode *first = dir_node->internal.next_layer;
     struct vnode *vn = new_vnode(dir_node, component_name, type);
 
-    list_add_tail(&vn->list, &first->list);
+    if (first == NULL)
+        dir_node->internal.next_layer = vn;
+    else 
+        list_add_tail(&vn->list, &first->list);
     *target = vn;
     return 0;
 }
@@ -256,11 +271,11 @@ int svc_open(const char *pathname, int flags)
     struct file *file = NULL;
     rootfs->root->f_ops->open(pathname, flags, &file);
 
-    if (file == NULL) {
-        current->fdt->files[fdt_idx] = file;
-        return fdt_idx;
-    }
-    return -1;
+    if (file == NULL)
+        return -1;
+    
+    current->fdt->files[fdt_idx] = file;
+    return fdt_idx;
 }
 
 int svc_close(int fd)
