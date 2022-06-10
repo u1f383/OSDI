@@ -5,4 +5,6 @@
 
 extern const struct filesystem tmpfs;
 
+int tmpfs_setup_mount(const struct filesystem *fs, struct mount *mount);
+
 #endif /* _TMPFS_H_ */

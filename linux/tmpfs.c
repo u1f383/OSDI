@@ -2,9 +2,8 @@
 #include <fs.h>
 #include <util.h>
 
-int tmpfs_setup_mount(const struct filesystem *fs, struct mount *mount);
-
 const struct filesystem tmpfs = {
+    .config = 0,
     .name = "tmpfs",
     .setup_mount = tmpfs_setup_mount,
 };

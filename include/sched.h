@@ -121,7 +121,7 @@ void thread_release(TaskStruct *curr, int16_t ec);
 void call_sigreturn();
 
 uint32_t create_kern_task(void(*prog)(), void *arg);
-uint32_t create_user_task(CpioHeader cpio_obj);
+uint32_t create_user_task(const char *pathname);
 
 void thread_trampoline(void(*func)(void *), void *arg);
 void __thread_trampoline();

@@ -3,6 +3,7 @@
 
 #include <util.h>
 #include <types.h>
+#include <fs.h>
 
 /** 
  * Device tree of bcm2837 board:
@@ -272,8 +273,14 @@ static inline void uart_enable_intr()
  * ============ Mailbox ============
  */
 
-void get_board_revision(uint32_t *frev);
-void get_arm_memory(uint32_t *base, uint32_t *size);
 int mailbox_call(uint32_t channel, volatile uint32_t *mbox);
+int fb_open(struct vnode *dir_node, struct vnode *vnode,
+             const char *component_name, int flags, struct file **target);
+
+/**
+ * ============ file operation ============
+ */
+extern const struct file_operations uart_file_ops;
+extern const struct file_operations fb_file_ops;
 
 #endif /* _GPIO_H_ */

@@ -55,10 +55,7 @@ int64_t svc_uartread(char buf[], uint64_t size)
     if (size > 0x1000 || size == 0)
         return -1;
     
-    if (async_uart_recv_num(buf, size) == 0)
-        return 0;
-        
-    return size;
+    return async_uart_recv_num(buf, size);
 }
 
 int64_t svc_uartwrite(const char *buf, uint64_t size)
@@ -66,10 +63,7 @@ int64_t svc_uartwrite(const char *buf, uint64_t size)
     if (size > 0x1000 || size == 0)
         return -1;
     
-    if (async_uart_send_num(buf, size) == 0)
-        return 0;
-
-    return size;
+    return async_uart_send_num(buf, size);
 }
 
 void svc_exit(int16_t status)

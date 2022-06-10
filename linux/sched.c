@@ -172,8 +172,17 @@ uint32_t create_kern_task(void(*func)(), void *arg)
     return 0;
 }
 
-uint32_t create_user_task(CpioHeader cpio_obj)
+uint32_t create_user_task(const char *pathname)
 {
+    char component_name[16];
+    struct vnode *prev, *vnode;
+    
+    if (__vfs_lookup(pathname, component_name, &prev, &vnode) != 0)
+        return 1;
+
+    if (vnode == NULL)
+        return 1;
+
     TaskStruct *task = new_task();
     ThreadInfo *thread_info = &task->thread_info;
     mm_struct *mm = kmalloc(sizeof(mm_struct));
@@ -192,9 +201,9 @@ uint32_t create_user_task(CpioHeader cpio_obj)
     task->status = STOPPED;
     task->prio = 2;
 
-    task->prog_size = (cpio_obj.c_filesize + 0xfff) & ~0xfff;
+    task->prog_size = (vnode->size + 0xfff) & ~0xfff;
     task->prog = buddy_alloc(task->prog_size >> PAGE_SHIFT);
-    memcpy(task->prog, cpio_obj.content, cpio_obj.c_filesize);
+    memcpy(task->prog, vnode->internal.mem, task->prog_size);
 
     mappages(mm->pgd, 0x0, task->prog_size, virt_to_phys(task->prog));
     thread_info->x19 = 0; /* User code at 0x0 */
@@ -210,6 +219,16 @@ uint32_t create_user_task(CpioHeader cpio_obj)
     thread_info->fp = thread_info->sp;
 
     thread_info->lr = (uint64_t)from_el1_to_el0;
+
+    struct file *stdin, *stdout, *stderr;
+    if (__vfs_open_wrapper("/dev/uart", 0, &stdin)  != 0 ||
+        __vfs_open_wrapper("/dev/uart", 0, &stdout) != 0 ||
+        __vfs_open_wrapper("/dev/uart", 0, &stderr) != 0)
+        return -1;
+    
+    task->fdt->files[0] = stdin;
+    task->fdt->files[1] = stdout;
+    task->fdt->files[2] = stderr;
 
     disable_intr();
     list_add_tail(&task->list, &rq.list);
@@ -286,7 +305,9 @@ int32_t svc_fork()
     TaskStruct *task = new_task();
     mm_struct *mm = kmalloc(sizeof(mm_struct));
 
+    task->fdt = kmalloc(sizeof(struct fdt_struct));
     task->workdir = current->workdir;
+    memcpy(task->fdt, current->fdt, sizeof(struct fdt_struct));
 
     memset(mm, 0, sizeof(mm_struct));
     mm->pgd = buddy_alloc(1);
@@ -343,11 +364,7 @@ int32_t svc_fork()
 int32_t svc_exec(const char *name, char *const argv[])
 {
     TrapFrame *tf = (void *)read_normreg(x8);
-    CpioHeader cpio_obj;
     
-    if (cpio_find_file(name, &cpio_obj) != 0)
-        return -1;
-
     /* TODO: reallocate prog memory */
 
     current->workdir = rootfs->root;

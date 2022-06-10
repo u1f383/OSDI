@@ -7,6 +7,7 @@
 #define PD_TABLE     0b11
 #define PD_BLOCK     0b01
 #define PD_TABLE_ENT 0b11
+#define LOWER_ATTR_MASK ((1 << 11) - 1)
 #define AF_ACCESS (1 << 10)
 #define AP_ACCESS (1 << 6)
 

@@ -3,6 +3,7 @@
 
 #include <types.h>
 #include <util.h>
+#include <fs.h>
 
 #define CPIO_HEADER_MAGIC "070701"
 #define CPIO_FOOTER_MAGIC "TRAILER!!!"
@@ -15,11 +16,16 @@
 #define MKDEV(ma, mi) (((ma) << MINORBITS) | (mi))
 
 extern uint64_t cpio_start, cpio_end;
+extern const struct filesystem initramfs;
+
+#define S_IFMT 00170000
+#define S_IFDIR 0040000
+#define S_ISDIR(m) (((m) & S_IFMT) == S_IFDIR)
 
 typedef struct _CpioHeader
 {
     uint64_t c_ino;      /* I-number of file */
-    uint8_t c_mode;      /* File mode */
+    uint16_t c_mode;      /* File mode */
     uid_t c_uid;         /* Owner user ID */
     gid_t c_gid;         /* Owner uroup ID */
     uint64_t c_nlink;    /* Number of links to file */
@@ -32,6 +38,6 @@ typedef struct _CpioHeader
     const char *content;
 } CpioHeader;
 
-int32_t cpio_find_file(const char *target, CpioHeader *cpio_obj);
+int initramfs_setup_mount(const struct filesystem *fs, struct mount *mount);
 
 #endif /* _INITRAMFS_H_ */

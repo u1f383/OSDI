@@ -79,11 +79,8 @@ void kernel(void *dtb_base)
     // for (int i = 0; i < 3; i++)
     //     create_kern_task(foo, NULL);
 
-    CpioHeader cpio_obj;
-    if (cpio_find_file("./vfs1.img", &cpio_obj) != 0)
+    if (create_user_task("/initramfs/vfs1.img") != 0)
         hangon();
-
-    create_user_task(cpio_obj);
 
     idle();
 }

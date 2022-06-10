@@ -5,6 +5,8 @@
 
 void mappages(void *pgd, uint64_t va, uint64_t size, uint64_t pa)
 {
+    va &= ~MM_VIRT_KERN_START;
+    
     if (va & 0xfff)
         hangon();
 
@@ -28,7 +30,7 @@ void mappages(void *pgd, uint64_t va, uint64_t size, uint64_t pa)
             memset(page, 0, PAGE_SIZE);
             *((uint64_t *)pgtables[level] + pgtable_idx[level]) = virt_to_phys(page) | PD_TABLE;
         }
-        pgtables[level+1] = (void *)phys_to_virt(*((uint64_t *)pgtables[level] + pgtable_idx[level]) & ~0b11);
+        pgtables[level+1] = (void *)phys_to_virt(*((uint64_t *)pgtables[level] + pgtable_idx[level]) & ~LOWER_ATTR_MASK);
     }
     
     uint8_t update;
@@ -54,13 +56,15 @@ void mappages(void *pgd, uint64_t va, uint64_t size, uint64_t pa)
                 memset(page, 0, PAGE_SIZE);
                 *((uint64_t *)pgtables[level] + pgtable_idx[level]) = virt_to_phys(page) | PD_TABLE;
             }
-            pgtables[level+1] = (void *) phys_to_virt(*((uint64_t *)pgtables[level] + pgtable_idx[level]) & ~0b11);
+            pgtables[level+1] = (void *) phys_to_virt(*((uint64_t *)pgtables[level] + pgtable_idx[level]) & ~LOWER_ATTR_MASK);
         }
     } while (1);
 }
 
 pte_t *walk(void *pagetable, uint64_t va)
 {
+    va &= ~MM_VIRT_KERN_START;
+
     uint32_t pgtable_idx[4] = {
         va >> PGD_BIT,
         va >> PUD_BIT & ((1 << GRANULE_SIZE) - 1),
@@ -68,10 +72,17 @@ pte_t *walk(void *pagetable, uint64_t va)
         va >> PTE_BIT & ((1 << GRANULE_SIZE) - 1),
     };
 
+    uint64_t ent;
     for (int level = 0; level < 3; level++) {
-        pagetable = (void *)phys_to_virt(*((uint64_t *)pagetable + pgtable_idx[level]) & ~0b11);
-        if (pagetable == NULL)
+        ent = phys_to_virt(*((uint64_t *)pagetable + pgtable_idx[level])) ;
+        
+        if (ent == NULL)
             return NULL;
+
+        if ((ent & 0b11) == PD_BLOCK)
+            return (pte_t *)ent;
+        
+        pagetable = (void *)(ent & ~LOWER_ATTR_MASK);
     }
 
     return *((pte_t **)pagetable + pgtable_idx[3]);

@@ -2,7 +2,9 @@
 #include <util.h>
 #include <vm.h>
 #include <mm.h>
+#include <fs.h>
 #include <sched.h>
+#include <stdarg.h>
 
 #define UART_BUF_SIZE 0x400
 
@@ -21,6 +23,31 @@ int32_t uart_tx_head = 0,
 #define IS_TX_EMPTY (uart_tx_head == uart_tx_tail)
 #define IS_TX_FILL ((uart_tx_head == uart_tx_tail - 1) || \
                     ((uart_tx_head == 0) && (uart_tx_tail == UART_BUF_SIZE - 1)))
+
+int uart_write(struct file *file, const void *buf, uint64_t len);
+int uart_read(struct file *file, void *buf, uint64_t len);
+int fb_write(struct file *file, const void *buf, uint64_t len);
+int fb_ioctl(struct file *file, unsigned long request, va_list args);
+
+const struct file_operations uart_file_ops = {
+    .open = vfs_open,
+    .write = uart_write,
+    .read = uart_read,
+    .close = vfs_close,
+    .lseek64 = vfs_lseek64,
+    .mknod = vfs_mknod,
+    .ioctl = vfs_ioctl,
+};
+
+const struct file_operations fb_file_ops = {
+    .open = fb_open,
+    .write = fb_write,
+    .read = vfs_read,
+    .close = vfs_close,
+    .lseek64 = vfs_lseek64,
+    .mknod = vfs_mknod,
+    .ioctl = fb_ioctl,
+};
 
 void uart_init()
 {
@@ -148,7 +175,8 @@ void async_uart_sendstr(const char *str)
 
 int async_uart_recv_num(char *buf, int num)
 {
-    while (num)
+    int i = 0;
+    while (i < num)
     {
         if (IS_RX_EMPTY) {
             enable_rx_intr();
@@ -157,26 +185,27 @@ int async_uart_recv_num(char *buf, int num)
         
         *buf = uart_rx_rb[uart_rx_tail];
         uart_rx_tail = (uart_rx_tail+1) % UART_BUF_SIZE;
-        num--;
+        i++;
     }
 
-    return 1;
+    return i;
 }
 
 int async_uart_send_num(const char *buf, int num)
 {
-    while (num)
+    int i = 0;
+    while (i < num)
     {
         if (IS_TX_FILL)
             continue;
 
         uart_tx_rb[uart_tx_head] = *buf++;
         uart_tx_head = (uart_tx_head+1) % UART_BUF_SIZE;
-        num--;
+        i++;
         enable_tx_intr();
     }
 
-    return 1;
+    return i;
 }
 
 #define MAILBOX0_BASE (PERIF_ADDRESS + 0xb880)
@@ -195,25 +224,25 @@ int async_uart_send_num(const char *buf, int num)
 #define MAILBOX_RES_CODE_REQ_SUCC 0x80000000
 #define MAILBOX_RES_CODE_REQ_ERR 0x80000001
 
-#define MAILBOX_TAG_GET_BOARD_REVISION 0x00010002
-#define MAILBOX_TAG_GET_ARM_MEMORY 0x00010005
 #define MAILBOX_TAG_REQ_CODE 0
 #define MAILBOX_TAG_END 0
-
-#define MAILBOX0_CHANNEL_PROPERTYTAGS_ARMVC 0x8
-
-#define MAILBOX_ALLOC_BUFFER 0x40001
+#define MAILBOX_CH_PROP 8
 
 int mailbox_call(uint32_t channel, volatile uint32_t *mbox)
 {
+    uint64_t addr;
 
-    pte_t *pte = (pte_t *)walk(current->mm->pgd, (uint64_t)mbox & ~0xfff);
-    if (pte == NULL)
-        hangon();
+    if ((uint64_t)mbox & MM_VIRT_KERN_START) {
+        addr = virt_to_phys(mbox);
+    } else {
+        /* not kernel address */
+        pte_t *pte;
+        pte = (pte_t *)walk(current->mm->pgd, (uint64_t)mbox & ~0xfff);
+        addr = ((uint64_t)pte & ~0xfff) + ((uint64_t)mbox & 0xfff);
+    }
 
-    pte = (void *)(((uint64_t)pte & ~0xfff) + ((uint64_t)mbox & 0xfff));
     uint32_t magic = (channel & MAILBOX_CHANNEL_MASK) |
-                     ((uint32_t)(uint64_t)pte & MAILBOX_DATA_MASK);
+                     ((uint32_t)(uint64_t)addr & MAILBOX_DATA_MASK);
     /* Wait for mailbox not full */
     while (*MAILBOX0_STATUS & MAILBOX_STATUS_FULL);
     /* Pass message to GPU */
@@ -221,46 +250,149 @@ int mailbox_call(uint32_t channel, volatile uint32_t *mbox)
     /* Wait for mailbox not empty */
     while (*MAILBOX0_STATUS & MAILBOX_STATUS_EMPTY);
 
-    for (int i = 0; i < mbox[0] / 4; i++) {
-        if (mbox[i] == MAILBOX_ALLOC_BUFFER) {
-            mappages(current->mm->pgd, mbox[i+3], mbox[i+4], mbox[i+3]);
-            break;
-        }
-    }
-
     return *MAILBOX0_READ == magic;
 }
 
-void get_board_revision(uint32_t *frev)
+void mailbox_init(struct vnode *vnode)
 {
-    volatile uint32_t __attribute__((aligned(0x10))) mbox_buffer[36];
-    mbox_buffer[0] = 7 * 4;
-    mbox_buffer[1] = MAILBOX_REQ_CODE_PROC_REQ;
-    /* Tags */
-    mbox_buffer[2] = MAILBOX_TAG_GET_BOARD_REVISION;
-    mbox_buffer[3] = 4; /* Max value buffer size */
-    mbox_buffer[4] = MAILBOX_TAG_REQ_CODE;
-    mbox_buffer[5] = 0; /* Value buffer */
-    mbox_buffer[6] = MAILBOX_TAG_END;
+    unsigned int mbox[36];
+    unsigned int *mbox_ptr;
 
-    mailbox_call(MAILBOX0_CHANNEL_PROPERTYTAGS_ARMVC, mbox_buffer);
-    *frev = mbox_buffer[5];
+    if (((uint64_t)&mbox) & 0x8)
+        mbox_ptr = (unsigned int *)((uint64_t)&mbox + 8);
+    else
+        mbox_ptr = mbox;
+
+    mbox_ptr[0] = 35 * 4;
+    mbox_ptr[1] = MAILBOX_REQ_CODE_PROC_REQ;
+
+    mbox_ptr[2] = 0x48003; // set phy wh
+    mbox_ptr[3] = 8;
+    mbox_ptr[4] = 8;
+    mbox_ptr[5] = 1024; // FrameBufferInfo.width
+    mbox_ptr[6] = 768;  // FrameBufferInfo.height
+
+    mbox_ptr[7] = 0x48004; // set virt wh
+    mbox_ptr[8] = 8;
+    mbox_ptr[9] = 8;
+    mbox_ptr[10] = 1024; // FrameBufferInfo.virtual_width
+    mbox_ptr[11] = 768;  // FrameBufferInfo.virtual_height
+
+    mbox_ptr[12] = 0x48009; // set virt offset
+    mbox_ptr[13] = 8;
+    mbox_ptr[14] = 8;
+    mbox_ptr[15] = 0; // FrameBufferInfo.x_offset
+    mbox_ptr[16] = 0; // FrameBufferInfo.y.offset
+
+    mbox_ptr[17] = 0x48005; // set depth
+    mbox_ptr[18] = 4;
+    mbox_ptr[19] = 4;
+    mbox_ptr[20] = 32; // FrameBufferInfo.depth
+
+    mbox_ptr[21] = 0x48006; // set pixel order
+    mbox_ptr[22] = 4;
+    mbox_ptr[23] = 4;
+    mbox_ptr[24] = 1; // RGB, not BGR preferably
+
+    mbox_ptr[25] = 0x40001; // get framebuffer, gets alignment on request
+    mbox_ptr[26] = 8;
+    mbox_ptr[27] = 8;
+    mbox_ptr[28] = 4096; // FrameBufferInfo.pointer
+    mbox_ptr[29] = 0;    // FrameBufferInfo.size
+
+    mbox_ptr[30] = 0x40008; // get pitch
+    mbox_ptr[31] = 4;
+    mbox_ptr[32] = 4;
+    mbox_ptr[33] = 0; // FrameBufferInfo.pitch
+
+    mbox_ptr[34] = MAILBOX_TAG_END;
+
+    // this might not return exactly what we asked for, could be
+    // the closest supported resolution instead
+    if (mailbox_call(MAILBOX_CH_PROP, mbox_ptr) && mbox_ptr[20] == 32 && mbox_ptr[28] != 0) {
+        mbox_ptr[28] &= 0x3FFFFFFF;
+        vnode->internal.mem = (void *)phys_to_virt(mbox_ptr[28]);
+        vnode->size = mbox[29];
+    }
 }
 
-void get_arm_memory(uint32_t *base, uint32_t *size)
+int uart_write(struct file *file, const void *buf, uint64_t len)
 {
-    volatile uint32_t __attribute__((aligned(0x10))) mbox_buffer[36];
-    mbox_buffer[0] = 8 * 4;
-    mbox_buffer[1] = MAILBOX_REQ_CODE_PROC_REQ;
-    /* Tags */
-    mbox_buffer[2] = MAILBOX_TAG_GET_ARM_MEMORY;
-    mbox_buffer[3] = 8; /* Max value buffer size */
-    mbox_buffer[4] = MAILBOX_TAG_REQ_CODE;
-    mbox_buffer[5] = 0; /* Value buffer [0] */
-    mbox_buffer[6] = 0; /* Value buffer [1] */
-    mbox_buffer[7] = MAILBOX_TAG_END;
+    return async_uart_send_num(buf, len);
+}
 
-    mailbox_call(MAILBOX0_CHANNEL_PROPERTYTAGS_ARMVC, mbox_buffer);
-    *base = mbox_buffer[5];
-    *size = mbox_buffer[6];
+int uart_read(struct file *file, void *buf, uint64_t len)
+{
+    return async_uart_recv_num(buf, len);
+}
+
+int fb_write(struct file *file, const void *buf, uint64_t len)
+{
+    const char *ptr = buf;
+    uint64_t i;
+
+    if (file->vnode->internal.mem == MM_VIRT_KERN_START)
+        hangon();
+
+    for (i = 0; i < len && file->f_pos < file->vnode->size; i++, file->f_pos++)
+        *(file->vnode->internal.mem + file->f_pos) = *ptr++;
+
+    return i;
+}
+
+struct framebuffer_info {
+    unsigned int width;
+    unsigned int height;
+    unsigned int pitch;
+    unsigned int isrgb;
+};
+
+int fb_ioctl(struct file *file, unsigned long request, va_list args)
+{
+    struct framebuffer_info *fbinfo = va_arg(args, struct framebuffer_info*);
+    unsigned int mbox[17];
+    unsigned int *mbox_ptr;
+
+    if (((uint64_t)&mbox) & 0x8)
+        mbox_ptr = (unsigned int *)((uint64_t)&mbox + 8);
+    else
+        mbox_ptr = mbox;
+
+    mbox_ptr[0] = 17 * 4;
+    mbox_ptr[1] = MAILBOX_REQ_CODE_PROC_REQ;
+
+    mbox_ptr[2] = 0x48003;
+    mbox_ptr[3] = 8;
+    mbox_ptr[4] = 8;
+    mbox_ptr[5] = fbinfo->width;
+    mbox_ptr[6] = fbinfo->height; 
+
+    mbox_ptr[7] = 0x48006;
+    mbox_ptr[8] = 4;
+    mbox_ptr[9] = 4;
+    mbox_ptr[10] = fbinfo->isrgb;
+
+    mbox_ptr[11] = 0x40008;
+    mbox_ptr[12] = 4;
+    mbox_ptr[13] = 4;
+    mbox_ptr[14] = fbinfo->pitch;
+
+    mbox_ptr[15] = MAILBOX_TAG_END;
+
+    return mailbox_call(MAILBOX_CH_PROP, mbox_ptr);
+}
+
+int fb_open(struct vnode *dir_node, struct vnode *vnode,
+             const char *component_name, int flags, struct file **target)
+{
+    if (vnode == NULL)
+        return -1;
+
+    if (vnode->internal.mem == NULL)
+        mailbox_init(vnode);
+
+    struct file *file = new_file(vnode, flags);
+    *target = file;
+
+    return 0;
 }
