@@ -141,6 +141,18 @@ void buddy_init()
     }
 }
 
+int32_t buddy_inc_refcnt(void *chk)
+{
+    Page *pg = virt_to_page(chk);
+    if ((pg->order == PAGE_ORDER_UND || pg->flags == PAGE_FLAG_RSVD)  || /* reserved memory */
+        (pg->order == PAGE_ORDER_BODY || pg->flags == PAGE_FLAG_BODY) || /* body */
+         pg->flags == PAGE_FLAG_FREED /* head has been freed */)
+        return -1;
+
+    pg->refcnt++;
+    return 0;
+}
+
 void* buddy_alloc(uint32_t req_pgcnt)
 {
     #ifdef DEBUG_MM
@@ -157,8 +169,8 @@ void* buddy_alloc(uint32_t req_pgcnt)
     buddy_lock = 1;
 
     int32_t curr_order = order;
-    while ( curr_order <= PAGE_ORDER_MAX && \
-            free_area[curr_order] == FREEAREA_UND)
+    while (curr_order <= PAGE_ORDER_MAX && \
+           free_area[curr_order] == FREEAREA_UND)
         curr_order++;
     
     /* Out of memory */
@@ -193,6 +205,7 @@ void* buddy_alloc(uint32_t req_pgcnt)
 
     pg->order = order;
     pg->flags = PAGE_FLAG_ALLOC;
+    pg->refcnt = 1;
     #ifdef DEBUG_MM
     printf("[DEBUG] Req order 0x%x, ret order 0x%x\r\n", order, curr_order);
     #endif /* DEBUG_MM */
@@ -206,15 +219,24 @@ int32_t buddy_free(void *chk)
     #ifdef DEBUG_MM
     printf("[DEBUG] Free to buddy\r\n");
     #endif /* DEBUG_MM */
-
-    Page *pg = virt_to_page(chk);
-    if ( (pg->order == PAGE_ORDER_UND || pg->flags == PAGE_FLAG_RSVD)  || /* reserved memory */
-         (pg->order == PAGE_ORDER_BODY || pg->flags == PAGE_FLAG_BODY) || /* body */
-          pg->flags == PAGE_FLAG_FREED /* head has been freed */)
-        return -1;
-
+    
     while (buddy_lock);
     buddy_lock = 1;
+
+    Page *pg = virt_to_page(chk);
+    if ((pg->order == PAGE_ORDER_UND || pg->flags == PAGE_FLAG_RSVD)  || /* reserved memory */
+        (pg->order == PAGE_ORDER_BODY || pg->flags == PAGE_FLAG_BODY) || /* body */
+         pg->flags == PAGE_FLAG_FREED /* head has been freed */)
+    {
+        buddy_lock = 0;
+        return -1;
+    }
+
+    pg->refcnt--;
+    if (pg->refcnt) {
+        buddy_lock = 0;
+        return 0;
+    }
 
     Page *merged_chk;
     /* Consolidate right */

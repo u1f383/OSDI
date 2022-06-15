@@ -10,6 +10,7 @@
 #include <vm.h>
 
 #define THREAD_STACK_SIZE 0x4000
+#define USER_THREAD_BASE_ADDR 0xffffffffb000
 #define current get_current()
 
 typedef struct _TrapFrame {
@@ -84,11 +85,7 @@ typedef struct _TaskStruct {
     Signal *signal;
     SignalCtx *signal_ctx;
     uint8_t signal_queue;
-
     mm_struct *mm;
-    void *prog;
-    uint32_t prog_size;
-
     struct fdt_struct *fdt;
     struct vnode *workdir;
 } TaskStruct;
@@ -127,5 +124,7 @@ void thread_trampoline(void(*func)(void *), void *arg);
 void __thread_trampoline();
 void from_el1_to_el0();
 void fork_trampoline();
+
+extern TaskStruct *main_task;
 
 #endif /* _SCHED_H_ */

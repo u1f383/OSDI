@@ -28,7 +28,6 @@ SignalCtx *new_signal_ctx(void *tf)
 {
     SignalCtx *signal_ctx = kmalloc(sizeof(SignalCtx));
     signal_ctx->tf = kmalloc(sizeof(TrapFrame));
-    signal_ctx->user_stack = kmalloc(THREAD_STACK_SIZE);
     memcpy(signal_ctx->tf, tf, sizeof(TrapFrame));
     return signal_ctx;
 }
@@ -66,7 +65,7 @@ void sigctx_update(void *trap_frame, void (*handler)())
     
     tf->x30 = (uint64_t)call_sigreturn;
     tf->elr_el1 = (uint64_t)handler;
-    tf->sp_el0 = (uint64_t)((char *)signal_ctx->user_stack + THREAD_STACK_SIZE - 0x10);
+    tf->sp_el0 -= 0x100;
 }
 
 void try_signal_handle(void *trap_frame)
@@ -96,7 +95,6 @@ void svc_sigreturn()
 {
     memcpy((void *)read_normreg(x8), current->signal_ctx->tf, sizeof(TrapFrame));
     kfree(current->signal_ctx->tf);
-    kfree(current->signal_ctx->user_stack);
     kfree(current->signal_ctx);
     current->signal_ctx = NULL;
 }

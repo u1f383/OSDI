@@ -1,5 +1,6 @@
 #include <sched.h>
 #include <mm.h>
+#include <vm.h>
 #include <signal.h>
 #include <irq.h>
 #include <printf.h>
@@ -76,7 +77,6 @@ void main_thread_init()
     main_task->pid = 0;
     main_task->status = RUNNING;
     main_task->prio = 1;
-    main_task->user_stack = 0;
     main_task->kern_stack = (void *)kern_end;
     main_task->mm = kmalloc(sizeof(mm_struct));
     main_task->mm->pgd = (pgd_t *)spin_table_start;
@@ -147,12 +147,12 @@ uint32_t create_kern_task(void(*func)(), void *arg)
     
     task->mm = kmalloc(sizeof(mm_struct));
     memset(task->mm, 0, sizeof(mm_struct));
+
     task->mm->pgd = (pgd_t *)spin_table_start;
 
     task->pid = 0;
     task->status = STOPPED;
     task->prio = 2;
-    task->user_stack = 0;
 
     thread_info->x19 = (uint64_t)func;
     thread_info->x20 = (uint64_t)arg;
@@ -185,14 +185,17 @@ uint32_t create_user_task(const char *pathname)
 
     TaskStruct *task = new_task();
     ThreadInfo *thread_info = &task->thread_info;
-    mm_struct *mm = kmalloc(sizeof(mm_struct));
+    mm_struct *mm;
+    vm_area_struct *vma;
     
-    task->fdt = kmalloc(sizeof(struct fdt_struct));
-    memset(task->fdt, 0, sizeof(struct fdt_struct));
-
     task->workdir = rootfs->root;
     
+    mm = kmalloc(sizeof(mm_struct));
     memset(mm, 0, sizeof(mm_struct));
+
+    task->fdt = kmalloc(sizeof(struct fdt_struct));
+    memset(task->fdt, 0, sizeof(struct fdt_struct));
+    
     mm->pgd = buddy_alloc(1);
     memset(mm->pgd, 0, PAGE_SIZE);
 
@@ -201,18 +204,16 @@ uint32_t create_user_task(const char *pathname)
     task->status = STOPPED;
     task->prio = 2;
 
-    task->prog_size = (vnode->size + 0xfff) & ~0xfff;
-    task->prog = buddy_alloc(task->prog_size >> PAGE_SHIFT);
-    memcpy(task->prog, vnode->internal.mem, task->prog_size);
-
-    mappages(mm->pgd, 0x0, task->prog_size, virt_to_phys(task->prog));
+    vma = mmap_internal(task->mm, (void *)0, PAGE_ROUNDUP(vnode->size), PROT_READ | PROT_EXEC, 0);
+    vma->data = (const char *)vnode->internal.mem;
     thread_info->x19 = 0; /* User code at 0x0 */
     
-    task->user_stack = buddy_alloc(THREAD_STACK_SIZE >> PAGE_SHIFT);
-    memset(task->user_stack, 0, THREAD_STACK_SIZE);
-    mappages(mm->pgd, 0xffffffffb000, THREAD_STACK_SIZE, virt_to_phys(task->user_stack));
-    thread_info->x20 = 0xffffffffb000 + THREAD_STACK_SIZE - 0x10;
+    vma = mmap_internal(task->mm, (void *)USER_THREAD_BASE_ADDR, THREAD_STACK_SIZE, PROT_READ | PROT_WRITE, 0);
+    thread_info->x20 = USER_THREAD_BASE_ADDR + THREAD_STACK_SIZE - 0x10;
 
+    /**
+     * Kernel space need not demand paging
+     */
     thread_info->sp = (uint64_t)kmalloc(THREAD_STACK_SIZE);
     task->kern_stack = (void *)thread_info->sp;
     thread_info->sp += THREAD_STACK_SIZE - 0x10;
@@ -221,6 +222,7 @@ uint32_t create_user_task(const char *pathname)
     thread_info->lr = (uint64_t)from_el1_to_el0;
 
     struct file *stdin, *stdout, *stderr;
+
     if (__vfs_open_wrapper("/dev/uart", 0, &stdin)  != 0 ||
         __vfs_open_wrapper("/dev/uart", 0, &stdout) != 0 ||
         __vfs_open_wrapper("/dev/uart", 0, &stderr) != 0)
@@ -266,8 +268,6 @@ void kill_zombies()
         iter = container_of(iter->list.next, TaskStruct, list);
 
         list_del(&prev->list);
-        if (prev->user_stack)
-            kfree(prev->user_stack);
         kfree(prev->kern_stack);
 
         if ((uint64_t)prev->mm->pgd != spin_table_start)
@@ -280,9 +280,6 @@ void kill_zombies()
 
         if (prev->fdt)
             kfree(prev->fdt);
-        
-        if (prev->prog)
-            kfree(prev->prog);
         
         kfree(prev);
         eq.len--;
@@ -303,38 +300,38 @@ int32_t svc_fork()
 {
     TrapFrame *tf = (void *)read_normreg(x8);
     TaskStruct *task = new_task();
-    mm_struct *mm = kmalloc(sizeof(mm_struct));
+    mm_struct *mm;
+
+    task->workdir = current->workdir;
 
     task->fdt = kmalloc(sizeof(struct fdt_struct));
-    task->workdir = current->workdir;
-    memcpy(task->fdt, current->fdt, sizeof(struct fdt_struct));
+    for (int i = 0; i < FDT_SIZE; i++) {
+        if (current->fdt->files[i] != NULL) {
+            task->fdt->files[i] = kmalloc(sizeof(struct file));
+            memcpy(task->fdt->files[i], current->fdt->files[i], sizeof(struct file));
+        }
+    }
 
+    mm = kmalloc(sizeof(mm_struct));
     memset(mm, 0, sizeof(mm_struct));
+    dup_vma(current->mm, mm);
+
     mm->pgd = buddy_alloc(1);
     memset(mm->pgd, 0, PAGE_SIZE);
-    task->mm = mm;
+    dup_pages(current->mm->pgd, mm->pgd, 0);
 
+    task->mm = mm;
     task->pid = _currpid++;
     task->prio = current->prio;
     task->status = RUNNING;
 
-    task->prog_size = current->prog_size;
-    task->prog = buddy_alloc(current->prog_size >> PAGE_SHIFT);
-    memcpy(task->prog, current->prog, current->prog_size);
-    mappages(mm->pgd, 0x0, task->prog_size, virt_to_phys(task->prog));
-
-    task->user_stack = buddy_alloc(THREAD_STACK_SIZE >> PAGE_SHIFT);
-    mappages(mm->pgd, 0xffffffffb000, THREAD_STACK_SIZE, virt_to_phys(task->user_stack));
-
     task->kern_stack = kmalloc(THREAD_STACK_SIZE);
-    memcpy(task->user_stack, current->user_stack, THREAD_STACK_SIZE);
     memcpy(task->kern_stack, current->kern_stack, THREAD_STACK_SIZE);
 
-    int64_t ufp_offset = tf->x29 - (uint64_t)current->user_stack;
     uint64_t tf_offset = (uint64_t)tf - (uint64_t)current->kern_stack;
     task->thread_info.lr = (uint64_t)fork_trampoline;
-    task->thread_info.sp = (uint64_t)task->kern_stack + tf_offset; // new trap frame
-    task->thread_info.fp = (uint64_t)task->kern_stack + ufp_offset;
+    task->thread_info.sp = (uint64_t)task->kern_stack + tf_offset;
+    task->thread_info.fp = current->thread_info.fp;
     task->thread_info.x19 = tf->x30;
     task->thread_info.x20 = tf->sp_el0;
 
@@ -364,13 +361,30 @@ int32_t svc_fork()
 int32_t svc_exec(const char *name, char *const argv[])
 {
     TrapFrame *tf = (void *)read_normreg(x8);
-    
-    /* TODO: reallocate prog memory */
+    vm_area_struct *vma = find_vma(current->mm, 0);
 
+    if (vma == NULL || vma->data == NULL)
+        return -1;
+
+    char component_name[16];
+    struct vnode *prev, *vnode;
+    
+    if (__vfs_lookup(name, component_name, &prev, &vnode) != 0)
+        return 1;
+
+    if (vnode == NULL)
+        return 1;
+    
+    release_vma(current->mm);
+    vma = mmap_internal(current->mm, (void *)0, PAGE_ROUNDUP(vnode->size), PROT_READ | PROT_EXEC, 0);
+    vma = mmap_internal(current->mm, (void *)USER_THREAD_BASE_ADDR, THREAD_STACK_SIZE, PROT_READ | PROT_WRITE, 0);
+
+    vma->data = (const char *)vnode->internal.mem;
     current->workdir = rootfs->root;
     current->pid = _currpid++;
-    tf->x30 = (uint64_t)current->prog;
-    tf->sp_el0 = (tf->sp_el0 & (THREAD_STACK_SIZE - 1)) + THREAD_STACK_SIZE - 0x10;
+
+    tf->elr_el1 = 0;
+    tf->sp_el0 = USER_THREAD_BASE_ADDR + THREAD_STACK_SIZE - 0x10;
 
     return 0;
 }

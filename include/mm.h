@@ -6,6 +6,7 @@
 
 #define PAGE_SIZE (4 * KB)
 #define PAGE_SHIFT 12
+#define PAGE_OFFSET_MASK (0xfff)
 #define MM_VIRT_KERN_START 0xFFFF000000000000
 #define PFN_BASE_OFFSET (phys_mem_start >> PAGE_SHIFT)
 
@@ -33,21 +34,25 @@
 #define su_rsvd_start    0xFFFF000000100000
 #define su_rsvd_end      0xFFFF000000200000
 
+#define PAGE_ROUNDUP(addr) (((addr) + 0xfff) & ~0xfff)
+
 extern uint64_t phys_mem_end;
 
 typedef struct _Page {
     /* Used to check the page status */
-    uint8_t flags : 4;
+    uint16_t flags : 4;
     #define PAGE_FLAG_FREED 0
     #define PAGE_FLAG_RSVD  (1<<0)
     #define PAGE_FLAG_ALLOC (1<<1)
     #define PAGE_FLAG_BODY  (1<<2)
     
     /* Order of buddy system, and used to check the page is head or body, too */
-    uint8_t order : 4;
+    uint16_t order : 4;
     #define PAGE_ORDER_MAX  11
     #define PAGE_ORDER_BODY 0b1111
     #define PAGE_ORDER_UND  0b1110
+
+    uint16_t refcnt : 8;
 } Page;
 
 typedef struct _FreeArea {
@@ -79,6 +84,8 @@ void page_init();
 void buddy_init();
 void slab_init();
 void register_mem_reserve(uint64_t start, uint64_t end);
+
+int32_t buddy_inc_refcnt(void *chk);
 
 void* buddy_alloc(uint32_t req_pgcnt);
 void* kmalloc(uint32_t sz);

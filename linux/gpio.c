@@ -92,14 +92,12 @@ void uart_intr_handler(reg32 orig_ier)
 {
     /* Transmit holding register empty */
     if (aux_regs->mu_iir & 0b010) {
-        if (!IS_TX_EMPTY) {
+        while (!IS_TX_EMPTY) {
             set_value(aux_regs->mu_io, uart_tx_rb[uart_tx_tail],
                         AUXMUIO_Transmit_data_write_BIT, AUXMUIO_RESERVED_BIT);
             uart_tx_tail = (uart_tx_tail+1) % UART_BUF_SIZE;
         }
-        else {
-            orig_ier &= ~(0b10);
-        }
+        orig_ier &= ~(0b10);
     } else if ((aux_regs->mu_iir & 0b100) && !IS_RX_FILL) {
         /* Receiver holds valid byte */
         uart_rx_rb[uart_rx_head] = \
@@ -164,9 +162,12 @@ void async_uart_sendstr(const char *str)
 
     while (*str)
     {
-        if (IS_TX_FILL)
+        if (IS_TX_FILL) {
+            enable_tx_intr();
             continue;
+        }
 
+        disable_tx_intr();
         uart_tx_rb[uart_tx_head] = *str++;
         uart_tx_head = (uart_tx_head+1) % UART_BUF_SIZE;
         enable_tx_intr();
@@ -183,9 +184,11 @@ int async_uart_recv_num(char *buf, int num)
             continue;
         }
         
+        disable_rx_intr();
         *buf = uart_rx_rb[uart_rx_tail];
         uart_rx_tail = (uart_rx_tail+1) % UART_BUF_SIZE;
         i++;
+        enable_rx_intr();
     }
 
     return i;
@@ -196,9 +199,12 @@ int async_uart_send_num(const char *buf, int num)
     int i = 0;
     while (i < num)
     {
-        if (IS_TX_FILL)
+        if (IS_TX_FILL) {
+            enable_tx_intr();
             continue;
+        }
 
+        disable_tx_intr();
         uart_tx_rb[uart_tx_head] = *buf++;
         uart_tx_head = (uart_tx_head+1) % UART_BUF_SIZE;
         i++;
@@ -331,7 +337,7 @@ int fb_write(struct file *file, const void *buf, uint64_t len)
     const char *ptr = buf;
     uint64_t i;
 
-    if (file->vnode->internal.mem == MM_VIRT_KERN_START)
+    if ((uint64_t)file->vnode->internal.mem == MM_VIRT_KERN_START)
         hangon();
 
     for (i = 0; i < len && file->f_pos < file->vnode->size; i++, file->f_pos++)

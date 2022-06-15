@@ -88,5 +88,5 @@ fork_trampoline:
 
 .global call_sigreturn
 call_sigreturn:
-    mov x8, 0xa
+    mov x8, 0x14
     svc 0

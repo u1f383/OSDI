@@ -12,7 +12,6 @@ typedef struct _Signal {
 
 typedef struct _SignalCtx {
     void *tf;
-    void *user_stack;
 } SignalCtx;
 
 #include <sched.h>

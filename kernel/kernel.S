@@ -73,6 +73,7 @@ page_table_setup:
     mov x3, 0x00000000
     mov x4, 0x3B400000
     orr x3, x2, x3
+
 setup_ram_page:
     str x3, [x1], #8
     add x3, x3, 0x200000
@@ -83,6 +84,7 @@ setup_ram_page:
     mov x3, 0x3B400000
     mov x4, 0x40000000
     orr x3, x2, x3
+
 setup_perif_page:
     str x3, [x1], #8
     add x3, x3, 0x200000
@@ -229,7 +231,7 @@ dummy_handler7:
 # -------------------------
 .align 7
     # 8 - Lower exception level - synchronous event
-    b svc_handler
+    b sync_exception_handler
 .align 7
     # 9 - Lower exception level - IRQ
     b irq_handler_wrapper
@@ -262,23 +264,36 @@ dummy_handler15:
 
 .align 7
 dummy_handler_exception:
-    bl dummy_handler_exception
-svc_handler:
+    b dummy_handler_exception
+
+sync_exception_handler:
     save_registers
 
     # Get exception class (EC)
     mrs x0, esr_el1
     asr x1, x0, 26
     
-    # If not SVC, do nothing
+    # SVC
     cmp x1, 0x15
-    b.ne dummy_handler_exception
+    b.eq svc_handler
+    cmp x1, 0x20
+    b.eq page_fault_handler
+    cmp x1, 0x24
+    b.eq page_fault_handler
+    b dummy_handler_exception
 
+page_fault_handler:
+    mrs x0, far_el1
+    mrs x1, esr_el1
+    bl do_page_fault
+    b sync_exception_handler_end
+
+svc_handler:
     # Get syscall number
     mov x0, x8
     bl sysno_check
     cmp x0, 0
-    b.ne svc_handler_ret
+    b.ne sync_exception_handler_end
 
     # load argument
     ldp x0, x1, [sp ,16 * 0]
@@ -297,7 +312,7 @@ svc_handler:
     blr x9
     msr DAIFSet, 0xf
 
-svc_handler_ret:
+sync_exception_handler_end:
     ldp x30, x1, [sp, 16 * 15]
     ldp x2, x3, [sp, 16 * 16]
 

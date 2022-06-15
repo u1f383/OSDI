@@ -46,7 +46,6 @@
 #define STR_HELPER(x) #x
 #define STR(x) STR_HELPER(x)
 #define NULL 0
-#define NULLPTR 0xffffffff
 
 int strcmp(const char *s1, const char *s2);
 int strncmp(const char *s1, const char *s2, uint32_t cnt);
@@ -80,6 +79,8 @@ int8_t log_2(uint64_t value);
 
 #define _floor(val, bit) ( (val) & ~((1 << bit) - 1) )
 #define _ceil(val, bit)  ( _floor(val + ((1 << bit) - 1), bit) )
+#define MIN(a,b) (((a)<(b))?(a):(b))
+#define MAX(a,b) (((a)>(b))?(a):(b))
 
 /* REGISTER OPERATION */
 #define read_sysreg(reg) ({          \
