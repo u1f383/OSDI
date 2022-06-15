@@ -39,6 +39,7 @@ debug_kern:
 						-kernel $(KERN_IMG) \
 						-serial null \
 						-serial $(INTERFACE) \
+						-drive if=sd,file=sfn_nctuos.img,format=raw \
 						-initrd initramfs.cpio \
 						-dtb bcm2710-rpi-3-b-plus.dtb \
 						-S -s
@@ -61,6 +62,7 @@ run_kern:
 						-kernel $(KERN_IMG) \
 						-serial null \
 						-serial $(INTERFACE) \
+						-drive if=sd,file=sfn_nctuos.img,format=raw \
 						-initrd initramfs.cpio \
 						-dtb bcm2710-rpi-3-b-plus.dtb
 

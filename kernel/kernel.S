@@ -214,8 +214,8 @@ dummy_handler3:
 # -------------------------
 .align 7
     # 4
-dummy_handler4:
-    bl dummy_handler4
+    qq:
+    b sync_exception_handler
 .align 7
     # 5 - SP_ELx - IRQ
     b irq_handler_wrapper
@@ -278,7 +278,11 @@ sync_exception_handler:
     b.eq svc_handler
     cmp x1, 0x20
     b.eq page_fault_handler
+    cmp x1, 0x21
+    b.eq page_fault_handler
     cmp x1, 0x24
+    b.eq page_fault_handler
+    cmp x1, 0x25
     b.eq page_fault_handler
     b dummy_handler_exception
 
@@ -286,6 +290,7 @@ page_fault_handler:
     mrs x0, far_el1
     mrs x1, esr_el1
     bl do_page_fault
+    ldr x0, [sp ,16 * 0]
     b sync_exception_handler_end
 
 svc_handler:

@@ -97,8 +97,10 @@ void mappages(void *pgd, uint64_t va, uint64_t size, uint64_t pa, uint64_t attr)
     uint64_t pte_pa;
     do {
         pte_pa = *((uint64_t *)pgtables[3] + pgtable_idx[3]) & ~ATTR_MASK;
-        if (pte_pa)
+        if (pte_pa) {
+            memcpy((void *)phys_to_virt(pa), (void *)phys_to_virt(pte_pa), PAGE_SIZE);
             buddy_free((void *)phys_to_virt(pte_pa));
+        }
 
         *((uint64_t *)pgtables[3] + pgtable_idx[3]) = pa | BASE_PTE_ATTR | attr;
         update = 0;
@@ -236,9 +238,11 @@ vm_area_struct *mmap_internal(mm_struct *mm, void* addr, uint64_t len, int prot,
     vma = insert_vma(mm, _addr, _addr + len, flags, prot, attr);
 
     if (flags & MAP_POPULATE) {
-        void *pa = buddy_alloc(len >> PAGE_SHIFT);
-        memset(pa, 0, len);
-        mappages(mm->pgd, vma->vm_start, len, (uint64_t)pa, attr);
+        for (int i = 0; i < len; i += 0x1000) {
+            void *pa = buddy_alloc(1);
+            memset(pa, 0, PAGE_SIZE);
+            mappages(mm->pgd, vma->vm_start + i, PAGE_SIZE, (uint64_t)pa, attr);
+        }
     }
 
     return vma;
@@ -250,8 +254,13 @@ void *svc_mmap(void* addr, uint64_t len, int prot, int flags, int fd, int file_o
     return (void *)vma->vm_start;
 }
 
-#define ISS_EC_INSN_ABORT(ESR) ((ESR >> 26) == 0b100000)
-#define ISS_EC_DATA_ABORT(ESR) ((ESR >> 26) == 0b100100)
+#define EC_EL0_INSN_FAULT 0b100000
+#define EC_EL0_DATA_FAULT 0b100100
+#define EC_ELn_INSN_FAULT 0b100001
+#define EC_ELn_DATA_FAULT 0b100101
+
+#define ISS_EC_INSN_ABORT(ESR) ((ESR >> 26) == EC_EL0_INSN_FAULT || (ESR >> 26) == EC_ELn_INSN_FAULT)
+#define ISS_EC_DATA_ABORT(ESR) ((ESR >> 26) == EC_EL0_DATA_FAULT || (ESR >> 26) == EC_ELn_DATA_FAULT)
 
 #define ISS_WNR_BIT (1 << 6)
 #define ISS_WNR_IS_WRITE(ESR) (ESR & ISS_WNR_BIT)
@@ -259,8 +268,6 @@ void *svc_mmap(void* addr, uint64_t len, int prot, int flags, int fd, int file_o
 #define TRAN_FAULT_L0 0b000101
 #define PERM_FAULT_L1 0b001101
 
-#define EC_INSN_FAULT 0b100000
-#define EC_DATA_FAULT 0b100100
 
 void do_page_fault(uint64_t far, uint32_t esr)
 {
@@ -284,7 +291,7 @@ void do_page_fault(uint64_t far, uint32_t esr)
     } else if (ISS_EC_INSN_ABORT(esr) && !(vma->prot & PROT_EXEC))
         goto segfault;    
 
-    printf("[Translation fault]: %x\n", addr);
+    printf("[Translation fault]: %lx\n", addr);
 
     addr &= ~PAGE_OFFSET_MASK;
     pa = buddy_alloc(1);
@@ -296,8 +303,6 @@ void do_page_fault(uint64_t far, uint32_t esr)
      */
     if (vma->data != NULL)
         memcpy(pa, vma->data + (addr - vma->vm_start), PAGE_SIZE);
-    else
-        memset(pa, 0, PAGE_SIZE);
 
     return;
 
@@ -337,7 +342,8 @@ void dup_pages(void *parent, void *child, int level)
             if (level == 3) {
                 /* Page table entry */
                 *((uint64_t *)child + i) = *((uint64_t *)parent + i);
-                *((uint64_t *)child + i) |= PTE_AP_RDONLY; /* Set page to read only */
+                *((uint64_t *)parent + i) |= PTE_AP_RDONLY;
+                *((uint64_t *)child + i)  |= PTE_AP_RDONLY; /* Set page to read only */
                 if (buddy_inc_refcnt(parent_page))
                     hangon();
             } else {

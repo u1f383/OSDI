@@ -2,6 +2,7 @@
 .vscode
 .DS_store
 nctuos.img
+sfn_nctuos.img
 build
 test.dSYM
 kernel8.img

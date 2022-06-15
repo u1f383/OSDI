@@ -8,6 +8,7 @@
 #include <vm.h>
 #include <sched.h>
 #include <util.h>
+#include <sdhost.h>
 
 void usage()
 {
@@ -81,6 +82,8 @@ void kernel(void *dtb_base)
 
     if (create_user_task("/initramfs/vfs1.img") != 0)
         hangon();
+
+    // sd_init();
 
     idle();
 }
