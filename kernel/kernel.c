@@ -9,6 +9,7 @@
 #include <sched.h>
 #include <util.h>
 #include <sdhost.h>
+#include <fat32.h>
 
 void usage()
 {
@@ -62,6 +63,7 @@ void kernel(void *dtb_base)
 {
     uint64_t boot_time = read_sysreg(cntpct_el0);
 
+    sd_init();
     uart_init();
     printf_init(uart_sendstr);
     dtb_init(dtb_base);
@@ -80,10 +82,9 @@ void kernel(void *dtb_base)
     // for (int i = 0; i < 3; i++)
     //     create_kern_task(foo, NULL);
 
-    if (create_user_task("/initramfs/vfs1.img") != 0)
+    if (create_user_task("/initramfs/vfs2.img") != 0)
         hangon();
 
-    // sd_init();
 
     idle();
 }

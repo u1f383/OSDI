@@ -1,3 +1,5 @@
+#include <sdhost.h>
+
 // mmio
 #define KVA 0xffff000000000000
 #define MMIO_BASE (KVA + 0x3f000000)
@@ -175,7 +177,7 @@ static int sdcard_setup()
     sd_cmd(SEND_RELATIVE_ADDR, 0);
     get(SDHOST_RESP0, tmp);
     sd_cmd(SELECT_CARD, tmp);
-    sd_cmd(SET_BLOCKLEN, 512);
+    sd_cmd(SET_BLOCKLEN, BLOCK_SIZE);
 
     return 0;
 }
@@ -210,7 +212,7 @@ static void wait_finish()
     } while ((dbg & SDHOST_DBG_FSM_MASK) != SDHOST_HSTS_DATA);
 }
 
-void readblock(int block_idx, void *buf)
+void read_block(int block_idx, void *buf)
 {
     unsigned int *buf_u = (unsigned int *)buf;
     int succ = 0;
@@ -219,7 +221,7 @@ void readblock(int block_idx, void *buf)
         block_idx <<= 9;
     
     do {
-        set_block(512, 1);
+        set_block(BLOCK_SIZE, 1);
         sd_cmd(READ_SINGLE_BLOCK | SDHOST_READ, block_idx);
 
         for (int i = 0; i < 128; ++i) {
@@ -240,7 +242,7 @@ void readblock(int block_idx, void *buf)
     wait_finish();
 }
 
-void writeblock(int block_idx, void *buf)
+void write_block(int block_idx, void *buf)
 {
     unsigned int *buf_u = (unsigned int *)buf;
     int succ = 0;
@@ -249,7 +251,7 @@ void writeblock(int block_idx, void *buf)
         block_idx <<= 9;
 
     do {
-        set_block(512, 1);
+        set_block(BLOCK_SIZE, 1);
         sd_cmd(WRITE_SINGLE_BLOCK | SDHOST_WRITE, block_idx);
 
         for (int i = 0; i < 128; ++i) {

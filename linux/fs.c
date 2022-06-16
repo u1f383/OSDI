@@ -5,6 +5,7 @@
 #include <util.h>
 #include <sched.h>
 #include <gpio.h>
+#include <fat32.h>
 #include <stdarg.h>
 
 struct mount *rootfs = NULL;
@@ -48,6 +49,7 @@ static struct vnode *new_vnode(struct vnode *parent,
     vn->type = type;
     vn->mount = NULL;
     vn->size = 0;
+    vn->cache_attr = 0;
     vn->internal.mem = NULL;
 
     if (parent == NULL)
@@ -149,6 +151,12 @@ int register_filesystem(const struct filesystem *fs)
     if (vfs_mount("/initramfs", "initramfs") != 0)
         hangon();
 
+    if (vfs_mkdir("/boot") != 0)
+        hangon();
+
+    if (vfs_mount("/boot", "fat32") != 0)
+        hangon();
+
     return 0;
 }
 
@@ -177,8 +185,10 @@ int __vfs_open_wrapper(const char *pathname, int flags, struct file **file)
     if (__vfs_lookup(pathname, component_name, &dir_node, &vnode) != 0)
         return -1;
 
-    if (vnode != NULL)
-        return vnode->f_ops->open(dir_node, vnode, component_name,
+    // if (vnode != NULL)
+    //     return vnode->f_ops->open(dir_node, vnode, component_name,
+    if (dir_node != NULL)
+        return dir_node->f_ops->open(dir_node, vnode, component_name,
                                   flags, file);
 
     return rootfs->root->f_ops->open(dir_node, vnode, component_name,
@@ -235,12 +245,14 @@ long vfs_lseek64(struct file *file, long offset, int whence)
 
 int vfs_mount(const char *target, const char *filesystem)
 {
-    const struct filesystem *fs = NULL;
+    const struct filesystem *fs;
 
     if (!strcmp(filesystem, "tmpfs")) {
         fs = &tmpfs;
     } else if (!strcmp(filesystem, "initramfs")) {
         fs = &initramfs;
+    } else if (!strcmp(filesystem, "fat32")) {
+        fs = &fat32;
     } else {
         return -1;
     }
@@ -255,17 +267,17 @@ int vfs_mount(const char *target, const char *filesystem)
         return -1;
 
     struct mount *new_mount_point = kmalloc(sizeof(struct mount));
-    struct vnode *new_root = new_vnode(NULL, &file_ops, component_name, FILE_DIR);
+    struct vnode *new_root = new_vnode(NULL, fs->fops, component_name, FILE_DIR);
     
     new_mount_point->fs = fs;
     new_mount_point->root = new_root;
     vnode->mount = new_mount_point;
     new_root->mount = new_mount_point;
 
-    new_root->v_ops->create(new_root, &new, &file_ops, ".", FILE_SLINK);
+    new_root->v_ops->create(new_root, &new, fs->fops, ".", FILE_SLINK);
     new->internal.soft_link = new_root;
 
-    new_root->v_ops->create(new_root, &new, &file_ops, "..", FILE_SLINK);
+    new_root->v_ops->create(new_root, &new, fs->fops, "..", FILE_SLINK);
     new->internal.soft_link = vnode->parent;
 
     fs->setup_mount(fs, new_mount_point);
@@ -461,4 +473,9 @@ int svc_ioctl(int fd, unsigned long request, ...)
     va_end(args);
 
     return res;
+}
+
+void svc_sync()
+{
+    
 }

@@ -37,7 +37,8 @@ void *svc_table[] =
     svc_chdir, // 17
     svc_lseek64, // 18
     svc_ioctl, // 19
-    svc_sigreturn, // 20
+    svc_sync,
+    svc_sigreturn, // 21
 };
 
 #define SVC_NUM (sizeof(svc_table) / sizeof(svc_table[0]))

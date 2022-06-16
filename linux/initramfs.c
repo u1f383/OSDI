@@ -11,6 +11,7 @@ const struct filesystem initramfs = {
     .config = FS_RDONLY,
     .name = "initramfs",
     .setup_mount = initramfs_setup_mount,
+    .fops = &file_ops,
 };
 
 /* Name of file in cpio is 4-byte alignment */

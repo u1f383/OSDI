@@ -23,6 +23,8 @@ def CHS_decode(CHS):
 
 def get_dir_attr(val):
     attr_str = ""
+    if val & 0x0f == 0xf:
+        return "long_name"
     if val & 0x01:
         attr_str += "rdonly,"
     if val & 0x02:
@@ -35,8 +37,6 @@ def get_dir_attr(val):
         attr_str += "directory,"
     if val & 0x20:
         attr_str += "archive,"
-    if val & 0x0f == 0xf:
-        attr_str += "long_name,"
     return attr_str[:-1]
 
 @dataclass
@@ -147,8 +147,11 @@ for desc in in_used_partition_desc:
     fat_data = img[fat_offset:fat_offset_end]
 
     print("======== first 4 FAT ========")
-    for i in range(0, 0x10, 0x4):
-        print(hex(get_int(fat_data[i:i+4])))
+    for i in range(0, len(fat_data), 0x4):
+        if get_int(fat_data[i:i+4]) == 0xfff:
+            print(i)
+            break
+        # print(hex(get_int(fat_data[i:i+4])))
 
     # In fat32, the rootdir is included in the data block sector
     rootdir_sector = data_block_sector
@@ -164,16 +167,17 @@ for desc in in_used_partition_desc:
         if rootdir_data[i:i+8] == b'\x00' * 8:
             break
 
+        print(get_dir_attr(rootdir_data[i+11]))
         dir_ent = DirEnt(
             rootdir_data[i:i+8].strip().decode(),
-            rootdir_data[i+8:i+11],
+            rootdir_data[i+8:i+11].strip().decode(),
             get_dir_attr(rootdir_data[i+11]),
             rootdir_data[i+12],
             rootdir_data[i+13],
             get_int(rootdir_data[i+14:i+16]),
             get_int(rootdir_data[i+16:i+18]),
             get_int(rootdir_data[i+18:i+20]),
-            (get_int(rootdir_data[i+20:i+22]) << 8) + get_int(rootdir_data[i+26:i+28]),
+            (get_int(rootdir_data[i+20:i+22]) << 16) + get_int(rootdir_data[i+26:i+28]),
             get_int(rootdir_data[i+22:i+24]),
             get_int(rootdir_data[i+24:i+26]),
             get_int(rootdir_data[i+28:i+32]),
@@ -181,9 +185,10 @@ for desc in in_used_partition_desc:
 
         dir_ents.append(dir_ent)
 
+
     for ent in dir_ents:
         start_offset = get_clus_N_offset(ent.fst_clus)
         size_clus = math.ceil(ent.file_size / sector_size)
         end_offset = get_clus_N_offset(ent.fst_clus + size_clus)
-        print(f"file {ent.name} in {hex(start_offset)} - {hex(end_offset)}")
-        # open(f"./{ent.name}", "wb").write(img[start_offset:end_offset])
+        print(f"file {ent.name}.{ent.ext} in {hex(start_offset)} - {hex(end_offset)}")
+        # open(f"./{ent.name}.{ent.ext}", "wb").write(img[start_offset:end_offset])

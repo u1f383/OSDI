@@ -37,6 +37,7 @@ struct filesystem {
     uint8_t config;
     const char *name;
     int (*setup_mount)(const struct filesystem *fs, struct mount *mount);
+    const struct file_operations *fops;
 };
 
 #define FILE_NORM    (1 << 0)
@@ -45,6 +46,7 @@ struct filesystem {
 #define FILE_SLINK   (1 << 3)
 #define FILE_MAX_SIZE 4096
 #define FILE_COMPONENT_NAME_LEN 16
+#define FILE_CACHE_ATTR_DIRTY (1 << 0)
 struct vnode {
     char component_name[FILE_COMPONENT_NAME_LEN];
     struct mount *mount;
@@ -53,6 +55,7 @@ struct vnode {
     const struct file_operations *f_ops;
     struct list_head list;
     uint8_t type;
+    uint8_t cache_attr;
     uint64_t size;
 
     union {
@@ -62,6 +65,7 @@ struct vnode {
         struct device *dev;
     } internal;
 };
+#define VNODE_IS_DIRTY(vnode) (vnode->cache_attr & FILE_CACHE_ATTR_DIRTY)
 
 struct file {
     const struct file_operations *f_ops;
@@ -115,6 +119,7 @@ int svc_chdir(const char *path);
 #define SEEK_SET 0
 long svc_lseek64(int fd, long offset, int whence);
 int svc_ioctl(int fd, unsigned long request, ...);
+void svc_sync();
 
 extern struct mount *rootfs;
 extern const struct file_operations file_ops;
