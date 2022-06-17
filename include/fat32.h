@@ -67,6 +67,7 @@ int fat32_write(struct file *file, const void *buf, uint64_t len);
 int fat32_read(struct file *file, void *buf, uint64_t len);
 int fat32_open(struct vnode *dir_node, struct vnode *vnode,
                const char *component_name, int flags, struct file **target);
+int fat32_sb_sync();
 
 extern const struct filesystem fat32;
 extern const struct file_operations fat32_fops;

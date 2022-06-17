@@ -54,6 +54,9 @@ static int32_t fat32_writeback_internal(uint32_t curr_fat_idx, char *data, uint3
     prev_fat_sec = 0;
     prev_fat_off = 0;
 
+    if (curr_fat_idx != FAT_ENT_EOF)
+        first_clus = curr_fat_idx;
+
     while (curr_clus < needed_clus)
     {
         if (curr_fat_idx == FAT_ENT_EOF) {
@@ -66,11 +69,10 @@ static int32_t fat32_writeback_internal(uint32_t curr_fat_idx, char *data, uint3
         }
 
         if (curr_fat_off == FAT_ENT_EOF) {
+            curr_fat_off = prev_fat_off;
+            curr_fat_sec = prev_fat_sec;
             while (1) {
                 /* Find new FAT ent */
-                curr_fat_off = prev_fat_off;
-                curr_fat_sec = prev_fat_sec;
-
                 read_block(fat_sec + curr_fat_sec, buf);
                 for (; curr_fat_off < SECTOR_SIZE; curr_fat_off += 4) {
                     if (*(uint32_t *)(buf + curr_fat_off) == 0)
@@ -156,7 +158,7 @@ static int32_t fat32_init()
     memcpy(&fat32_meta.fat_size32, buf + 36, 4);
     memcpy(&fat32_meta.root_clus, buf + 40, 2);
 
-    fat32_meta.fat_sector = fat32_meta.rsvd_sec_cnt;
+    fat32_meta.fat_sector = fat32_meta.rsvd_sec_cnt + fat32_meta.part_desc.start_sector;
     fat32_meta.db_sector = fat32_meta.rsvd_sec_cnt + fat32_meta.fat_size32 * fat32_meta.num_fats + \
                            fat32_meta.part_desc.start_sector;
 

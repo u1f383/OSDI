@@ -41,6 +41,9 @@ get_current:
 
 .global from_el1_to_el0
 from_el1_to_el0:
+    # Temperary disable interrupt
+    msr DAIFSet, 0xf
+
     # Return to user program
     msr elr_el1, x19
     

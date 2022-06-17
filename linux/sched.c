@@ -47,10 +47,12 @@ TaskStruct *new_task()
 
 void schedule()
 {
-    if (rq.len == 1)
-        return;
-
     disable_intr();
+
+    if (rq.len == 1) {
+        enable_intr();
+        return;
+    }
 
     /* Pick next task */
     TaskStruct *next = container_of(current->list.next, TaskStruct, list);
@@ -66,6 +68,7 @@ void try_schedule()
     if (current != NULL && current->time == 0) {
         schedule();
         current->time = TIME_SLOT;
+        // update_timer();
     } else {
         update_timer();
     }
@@ -157,7 +160,7 @@ uint32_t create_kern_task(void(*func)(), void *arg)
     thread_info->x19 = (uint64_t)func;
     thread_info->x20 = (uint64_t)arg;
     
-    thread_info->sp = (uint64_t)kmalloc(THREAD_STACK_SIZE);
+    thread_info->sp = (uint64_t)buddy_alloc(4);
     task->kern_stack = (void *)thread_info->sp;
     thread_info->sp += THREAD_STACK_SIZE - 0x10;
     thread_info->fp = thread_info->sp;
@@ -170,6 +173,12 @@ uint32_t create_kern_task(void(*func)(), void *arg)
     enable_intr();
 
     return 0;
+}
+
+void fuck()
+{
+    printf("FUCK!\r\n");
+    hangon();
 }
 
 uint32_t create_user_task(const char *pathname)
@@ -214,7 +223,7 @@ uint32_t create_user_task(const char *pathname)
     /**
      * Kernel space need not demand paging
      */
-    thread_info->sp = (uint64_t)kmalloc(THREAD_STACK_SIZE);
+    thread_info->sp = (uint64_t)buddy_alloc(4);
     task->kern_stack = (void *)thread_info->sp;
     thread_info->sp += THREAD_STACK_SIZE - 0x10;
     thread_info->fp = thread_info->sp;
@@ -236,7 +245,6 @@ uint32_t create_user_task(const char *pathname)
     list_add_tail(&task->list, &rq.list);
     rq.len++;
     enable_intr();
-
     return 0;
 }
 

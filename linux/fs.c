@@ -6,6 +6,7 @@
 #include <sched.h>
 #include <gpio.h>
 #include <fat32.h>
+#include <printf.h>
 #include <stdarg.h>
 
 struct mount *rootfs = NULL;
@@ -136,6 +137,7 @@ int register_filesystem(const struct filesystem *fs)
     fs->setup_mount(fs, rootfs);
 
     current->workdir = rootfs->root;
+
     if (vfs_mkdir("/dev") != 0)
         hangon();
 
@@ -477,5 +479,5 @@ int svc_ioctl(int fd, unsigned long request, ...)
 
 void svc_sync()
 {
-    
+    fat32_sb_sync();   
 }

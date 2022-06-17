@@ -76,15 +76,16 @@ void kernel(void *dtb_base)
     task_queue_init();
     main_thread_init();
     register_filesystem(&tmpfs);
-
+    
     printf("boot_time: %x\r\n", boot_time);
 
     // for (int i = 0; i < 3; i++)
     //     create_kern_task(foo, NULL);
 
-    if (create_user_task("/initramfs/vfs2.img") != 0)
+    if (create_user_task("/initramfs/vfs2.img") != 0) {
+        printf("file not found!\r\n");
         hangon();
-
+    }
 
     idle();
 }

@@ -268,15 +268,12 @@ void *svc_mmap(void* addr, uint64_t len, int prot, int flags, int fd, int file_o
 #define TRAN_FAULT_L0 0b000101
 #define PERM_FAULT_L1 0b001101
 
-
 void do_page_fault(uint64_t far, uint32_t esr)
 {
+    void *pa;
     mm_struct *mm = current->mm;
     uint64_t addr = far;
     vm_area_struct *vma = find_vma(mm, addr);
-    void *pa;
-
-    printf("[MYLOG] AT %x\n", addr);
 
     /* Illegal virtual address */
     if (vma == NULL)
@@ -291,7 +288,7 @@ void do_page_fault(uint64_t far, uint32_t esr)
     } else if (ISS_EC_INSN_ABORT(esr) && !(vma->prot & PROT_EXEC))
         goto segfault;    
 
-    printf("[Translation fault]: %lx\n", addr);
+    printf("[Translation fault]: %lx\r\n", addr);
 
     addr &= ~PAGE_OFFSET_MASK;
     pa = buddy_alloc(1);
@@ -303,11 +300,11 @@ void do_page_fault(uint64_t far, uint32_t esr)
      */
     if (vma->data != NULL)
         memcpy(pa, vma->data + (addr - vma->vm_start), PAGE_SIZE);
-
     return;
 
 segfault:
-    printf("[Segmentation fault]: Kill Process %d\n", current->pid);
+    printf("[Segmentation fault]: Kill Process %d\r\n", current->pid);
+    thread_release(current, EXIT_CODE_KILL);
     hangon();
 }
 
