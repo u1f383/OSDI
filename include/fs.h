@@ -19,7 +19,8 @@ struct file_operations {
                 const char *component_name, int flags, struct file **target);
     int (*close)(struct file *file);
     long (*lseek64)(struct file *file, long offset, int whence);
-    int (*mknod)(const char *pathname, const struct file_operations *fops);
+    int (*mknod)(const char *pathname, const struct file_operations *fops,
+                 void (*initfunc)(struct vnode *vn));
     int (*ioctl)(struct file *file, unsigned long request, va_list args);
 };
 
@@ -105,7 +106,8 @@ int vfs_create(struct vnode *dir_node, struct vnode **target,
                 const char *component_name, uint8_t type);
 
 int vfs_mount(const char *target, const char *filesystem);
-int vfs_mknod(const char *pathname, const struct file_operations *fops);
+int vfs_mknod(const char *pathname, const struct file_operations *fops,
+              void (*initfunc)(struct vnode *vn));
 int vfs_ioctl(struct file *file, unsigned long request, va_list args);
 
 #define O_CREAT 00000100

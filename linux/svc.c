@@ -75,5 +75,5 @@ void svc_exit(int16_t status)
 
 int svc_mbox_call(unsigned char ch, unsigned int *mbox)
 {
-    return mailbox_call(ch, mbox);
+    return mailbox_call_wrapper(ch, mbox);
 }

@@ -141,10 +141,10 @@ int register_filesystem(const struct filesystem *fs)
     if (vfs_mkdir("/dev") != 0)
         hangon();
 
-    if (vfs_mknod("/dev/uart", &uart_file_ops) != 0)
+    if (vfs_mknod("/dev/uart", &uart_file_ops, NULL) != 0)
         hangon();
 
-    if (vfs_mknod("/dev/framebuffer", &fb_file_ops) != 0)
+    if (vfs_mknod("/dev/framebuffer", &fb_file_ops, mailbox_init) != 0)
         hangon();
 
     if (vfs_mkdir("/initramfs") != 0)
@@ -348,7 +348,8 @@ int vfs_mkdir(const char *pathname)
     return 0;
 }
 
-int vfs_mknod(const char *pathname, const struct file_operations *fops)
+int vfs_mknod(const char *pathname, const struct file_operations *fops,
+              void (*initfunc)(struct vnode *vn))
 {
     char component_name[FILE_COMPONENT_NAME_LEN];
     struct vnode *dir_node, *vnode;
@@ -360,6 +361,9 @@ int vfs_mknod(const char *pathname, const struct file_operations *fops)
         return -1;
 
     dir_node->v_ops->create(dir_node, &vnode, fops, component_name, FILE_CHR);
+
+    if (initfunc != NULL)
+        initfunc(vnode);
 
     return 0;
 }

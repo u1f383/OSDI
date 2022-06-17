@@ -65,6 +65,9 @@ __thread_trampoline:
 
 .global fork_trampoline
 fork_trampoline:
+    # Temperary disable interrupt
+    msr DAIFSet, 0xf
+    
     msr elr_el1, x19
     msr sp_el0, x20
 

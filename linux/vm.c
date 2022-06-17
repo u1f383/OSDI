@@ -141,15 +141,14 @@ pte_t *walk(void *pagetable, uint64_t va)
 
     uint64_t ent;
     for (int level = 0; level < 3; level++) {
-        ent = phys_to_virt(*((uint64_t *)pagetable + pgtable_idx[level])) ;
-        
+        ent = *((uint64_t *)pagetable + pgtable_idx[level]);
         if (ent == NULL)
             return NULL;
 
         if ((ent & 0b11) == PD_BLOCK)
             return (pte_t *)ent;
         
-        pagetable = (void *)(ent & ~ATTR_MASK);
+        pagetable = (void *)phys_to_virt(ent & ~ATTR_MASK);
     }
 
     return *((pte_t **)pagetable + pgtable_idx[3]);

@@ -40,7 +40,7 @@ const struct file_operations uart_file_ops = {
 };
 
 const struct file_operations fb_file_ops = {
-    .open = fb_open,
+    .open = vfs_open,
     .write = fb_write,
     .read = vfs_read,
     .close = vfs_close,
@@ -234,21 +234,15 @@ int async_uart_send_num(const char *buf, int num)
 #define MAILBOX_TAG_END 0
 #define MAILBOX_CH_PROP 8
 
-int mailbox_call(uint32_t channel, volatile uint32_t *mbox)
+#define MBOX_BUF_SIZE 64
+volatile uint32_t mbox[MBOX_BUF_SIZE];
+
+static int mailbox_call(uint32_t channel)
 {
-    uint64_t addr;
-
-    if ((uint64_t)mbox & MM_VIRT_KERN_START) {
-        addr = virt_to_phys(mbox);
-    } else {
-        /* not kernel address */
-        pte_t *pte;
-        pte = (pte_t *)walk(current->mm->pgd, (uint64_t)mbox & ~0xfff);
-        addr = ((uint64_t)pte & ~0xfff) + ((uint64_t)mbox & 0xfff);
-    }
-
+    uint64_t addr = virt_to_phys(mbox);
     uint32_t magic = (channel & MAILBOX_CHANNEL_MASK) |
                      ((uint32_t)(uint64_t)addr & MAILBOX_DATA_MASK);
+                     
     /* Wait for mailbox not full */
     while (*MAILBOX0_STATUS & MAILBOX_STATUS_FULL);
     /* Pass message to GPU */
@@ -259,65 +253,65 @@ int mailbox_call(uint32_t channel, volatile uint32_t *mbox)
     return *MAILBOX0_READ == magic;
 }
 
+int mailbox_call_wrapper(uint32_t channel, volatile uint32_t *_mbox)
+{
+    for (int i = 0; i < MBOX_BUF_SIZE; i++)
+        mbox[i] = _mbox[i];
+    
+    return mailbox_call(channel);
+}
+
 void mailbox_init(struct vnode *vnode)
 {
-    unsigned int mbox[36];
-    unsigned int *mbox_ptr;
+    mbox[0] = 35 * 4;
+    mbox[1] = MAILBOX_REQ_CODE_PROC_REQ;
 
-    if (((uint64_t)&mbox) & 0x8)
-        mbox_ptr = (unsigned int *)((uint64_t)&mbox + 8);
-    else
-        mbox_ptr = mbox;
+    mbox[2] = 0x48003; // set phy wh
+    mbox[3] = 8;
+    mbox[4] = 8;
+    mbox[5] = 1024; // FrameBufferInfo.width
+    mbox[6] = 768;  // FrameBufferInfo.height
 
-    mbox_ptr[0] = 35 * 4;
-    mbox_ptr[1] = MAILBOX_REQ_CODE_PROC_REQ;
+    mbox[7] = 0x48004; // set virt wh
+    mbox[8] = 8;
+    mbox[9] = 8;
+    mbox[10] = 1024; // FrameBufferInfo.virtual_width
+    mbox[11] = 768;  // FrameBufferInfo.virtual_height
 
-    mbox_ptr[2] = 0x48003; // set phy wh
-    mbox_ptr[3] = 8;
-    mbox_ptr[4] = 8;
-    mbox_ptr[5] = 1024; // FrameBufferInfo.width
-    mbox_ptr[6] = 768;  // FrameBufferInfo.height
+    mbox[12] = 0x48009; // set virt offset
+    mbox[13] = 8;
+    mbox[14] = 8;
+    mbox[15] = 0; // FrameBufferInfo.x_offset
+    mbox[16] = 0; // FrameBufferInfo.y.offset
 
-    mbox_ptr[7] = 0x48004; // set virt wh
-    mbox_ptr[8] = 8;
-    mbox_ptr[9] = 8;
-    mbox_ptr[10] = 1024; // FrameBufferInfo.virtual_width
-    mbox_ptr[11] = 768;  // FrameBufferInfo.virtual_height
+    mbox[17] = 0x48005; // set depth
+    mbox[18] = 4;
+    mbox[19] = 4;
+    mbox[20] = 32; // FrameBufferInfo.depth
 
-    mbox_ptr[12] = 0x48009; // set virt offset
-    mbox_ptr[13] = 8;
-    mbox_ptr[14] = 8;
-    mbox_ptr[15] = 0; // FrameBufferInfo.x_offset
-    mbox_ptr[16] = 0; // FrameBufferInfo.y.offset
+    mbox[21] = 0x48006; // set pixel order
+    mbox[22] = 4;
+    mbox[23] = 4;
+    mbox[24] = 1; // RGB, not BGR preferably
 
-    mbox_ptr[17] = 0x48005; // set depth
-    mbox_ptr[18] = 4;
-    mbox_ptr[19] = 4;
-    mbox_ptr[20] = 32; // FrameBufferInfo.depth
+    mbox[25] = 0x40001; // get framebuffer, gets alignment on request
+    mbox[26] = 8;
+    mbox[27] = 8;
+    mbox[28] = 4096; // FrameBufferInfo.pointer
+    mbox[29] = 0;    // FrameBufferInfo.size
 
-    mbox_ptr[21] = 0x48006; // set pixel order
-    mbox_ptr[22] = 4;
-    mbox_ptr[23] = 4;
-    mbox_ptr[24] = 1; // RGB, not BGR preferably
+    mbox[30] = 0x40008; // get pitch
+    mbox[31] = 4;
+    mbox[32] = 4;
+    mbox[33] = 0; // FrameBufferInfo.pitch
 
-    mbox_ptr[25] = 0x40001; // get framebuffer, gets alignment on request
-    mbox_ptr[26] = 8;
-    mbox_ptr[27] = 8;
-    mbox_ptr[28] = 4096; // FrameBufferInfo.pointer
-    mbox_ptr[29] = 0;    // FrameBufferInfo.size
-
-    mbox_ptr[30] = 0x40008; // get pitch
-    mbox_ptr[31] = 4;
-    mbox_ptr[32] = 4;
-    mbox_ptr[33] = 0; // FrameBufferInfo.pitch
-
-    mbox_ptr[34] = MAILBOX_TAG_END;
+    mbox[34] = MAILBOX_TAG_END;
 
     // this might not return exactly what we asked for, could be
     // the closest supported resolution instead
-    if (mailbox_call(MAILBOX_CH_PROP, mbox_ptr) && mbox_ptr[20] == 32 && mbox_ptr[28] != 0) {
-        mbox_ptr[28] &= 0x3FFFFFFF;
-        vnode->internal.mem = (void *)phys_to_virt(mbox_ptr[28]);
+    if (mailbox_call(MAILBOX_CH_PROP) && mbox[20] == 32 && mbox[28] != 0) {
+        mbox[28] &= 0x3FFFFFFF;
+        vnode->internal.mem = (void *)phys_to_virt(mbox[28]);
         vnode->size = mbox[29];
     }
 }
@@ -356,49 +350,27 @@ struct framebuffer_info {
 int fb_ioctl(struct file *file, unsigned long request, va_list args)
 {
     struct framebuffer_info *fbinfo = va_arg(args, struct framebuffer_info*);
-    unsigned int mbox[17];
-    unsigned int *mbox_ptr;
 
-    if (((uint64_t)&mbox) & 0x8)
-        mbox_ptr = (unsigned int *)((uint64_t)&mbox + 8);
-    else
-        mbox_ptr = mbox;
+    mbox[0] = 17 * 4;
+    mbox[1] = MAILBOX_REQ_CODE_PROC_REQ;
 
-    mbox_ptr[0] = 17 * 4;
-    mbox_ptr[1] = MAILBOX_REQ_CODE_PROC_REQ;
+    mbox[2] = 0x48003;
+    mbox[3] = 8;
+    mbox[4] = 8;
+    mbox[5] = fbinfo->width;
+    mbox[6] = fbinfo->height; 
 
-    mbox_ptr[2] = 0x48003;
-    mbox_ptr[3] = 8;
-    mbox_ptr[4] = 8;
-    mbox_ptr[5] = fbinfo->width;
-    mbox_ptr[6] = fbinfo->height; 
+    mbox[7] = 0x48006;
+    mbox[8] = 4;
+    mbox[9] = 4;
+    mbox[10] = fbinfo->isrgb;
 
-    mbox_ptr[7] = 0x48006;
-    mbox_ptr[8] = 4;
-    mbox_ptr[9] = 4;
-    mbox_ptr[10] = fbinfo->isrgb;
+    mbox[11] = 0x40008;
+    mbox[12] = 4;
+    mbox[13] = 4;
+    mbox[14] = fbinfo->pitch;
 
-    mbox_ptr[11] = 0x40008;
-    mbox_ptr[12] = 4;
-    mbox_ptr[13] = 4;
-    mbox_ptr[14] = fbinfo->pitch;
+    mbox[15] = MAILBOX_TAG_END;
 
-    mbox_ptr[15] = MAILBOX_TAG_END;
-
-    return mailbox_call(MAILBOX_CH_PROP, mbox_ptr);
-}
-
-int fb_open(struct vnode *dir_node, struct vnode *vnode,
-             const char *component_name, int flags, struct file **target)
-{
-    if (vnode == NULL)
-        return -1;
-
-    if (vnode->internal.mem == NULL)
-        mailbox_init(vnode);
-
-    struct file *file = new_file(vnode, flags);
-    *target = file;
-
-    return 0;
+    return mailbox_call(MAILBOX_CH_PROP);
 }

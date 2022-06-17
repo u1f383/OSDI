@@ -273,9 +273,8 @@ static inline void uart_enable_intr()
  * ============ Mailbox ============
  */
 
-int mailbox_call(uint32_t channel, volatile uint32_t *mbox);
-int fb_open(struct vnode *dir_node, struct vnode *vnode,
-             const char *component_name, int flags, struct file **target);
+int mailbox_call_wrapper(uint32_t channel, volatile uint32_t *_mbox);
+void mailbox_init(struct vnode *vnode);
 
 /**
  * ============ file operation ============
