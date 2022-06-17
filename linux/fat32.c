@@ -4,6 +4,7 @@
 #include <fs.h>
 #include <mm.h>
 #include <list.h>
+#include <printf.h>
 
 static FAT32Meta fat32_meta;
 
@@ -36,8 +37,8 @@ static inline uint32_t get_clusN_sector(uint32_t N)
     return (N-2) * fat32_meta.sec_per_clus + fat32_meta.db_sector;
 }
 
-#define FAT_ENT_EOF (0xfff)
-static int32_t fat32_writeback_internal(uint32_t curr_fat_idx, char *data, uint32_t size)
+#define FAT_ENT_EOF (0xfffffff)
+static uint32_t fat32_writeback_internal(uint32_t curr_fat_idx, char *data, uint32_t size)
 {
     uint32_t curr_fat_sec;
     uint32_t curr_fat_off;
@@ -45,7 +46,7 @@ static int32_t fat32_writeback_internal(uint32_t curr_fat_idx, char *data, uint3
     uint32_t prev_fat_off;
     uint32_t fat_sec = fat32_meta.fat_sector;
     uint32_t needed_clus = ((size + SECTOR_SIZE - 1) / SECTOR_SIZE) / fat32_meta.sec_per_clus;
-    uint32_t curr_clus = 0;
+    uint32_t curr_clus_num = 0;
     uint32_t first_clus = 0;
 
     char buf[SECTOR_SIZE];
@@ -54,23 +55,20 @@ static int32_t fat32_writeback_internal(uint32_t curr_fat_idx, char *data, uint3
     prev_fat_sec = 0;
     prev_fat_off = 0;
 
-    if (curr_fat_idx != FAT_ENT_EOF)
+    if (curr_fat_idx != 0)
         first_clus = curr_fat_idx;
 
-    while (curr_clus < needed_clus)
+    while (curr_clus_num < needed_clus)
     {
-        if (curr_fat_idx == FAT_ENT_EOF) {
-            /* In the end */
-            curr_fat_off = FAT_ENT_EOF;
-        } else {
+        if (curr_fat_idx != 0 && curr_fat_idx != FAT_ENT_EOF) {
             /* Has next entry */
             curr_fat_off = curr_fat_idx % FAT_ENT_PER_SEC;
             curr_fat_sec = curr_fat_idx / FAT_ENT_PER_SEC;
-        }
-
-        if (curr_fat_off == FAT_ENT_EOF) {
+            read_block(fat_sec + curr_fat_sec, buf);
+        } else {
             curr_fat_off = prev_fat_off;
             curr_fat_sec = prev_fat_sec;
+
             while (1) {
                 /* Find new FAT ent */
                 read_block(fat_sec + curr_fat_sec, buf);
@@ -87,25 +85,34 @@ static int32_t fat32_writeback_internal(uint32_t curr_fat_idx, char *data, uint3
                 curr_fat_sec++;
                 curr_fat_off = 0;
             }
-        } else {
-            read_block(fat_sec + curr_fat_sec, buf);
         }
 
-        if (curr_fat_idx == FAT_ENT_EOF && curr_clus != 0) {
-            *(uint32_t *)(buf + prev_fat_off) = curr_fat_sec * FAT_ENT_PER_SEC + curr_fat_off;
+        if (curr_fat_idx == 0 && curr_clus_num != 0) {
+            *(uint32_t *)(prev_buf + prev_fat_off) = curr_fat_sec * FAT_ENT_PER_SEC + curr_fat_off;
             write_block(fat_sec + prev_fat_sec, prev_buf);
         }
 
+        uint32_t fat_ent_idx = (curr_fat_sec * SECTOR_SIZE + curr_fat_off) / 4;
+        
         if (first_clus == 0)
-            first_clus = curr_fat_sec * FAT_ENT_PER_SEC + curr_fat_off;
+            first_clus = fat_ent_idx;
+
+        if (curr_clus_num == needed_clus - 1) {
+            /* Last one cluster */
+            *(uint32_t *)(buf + curr_fat_off) = FAT_ENT_EOF;
+            write_block(fat_sec + curr_fat_sec, buf);
+        }
+
+        write_block(get_clusN_sector(fat_ent_idx), data + curr_clus_num * SECTOR_SIZE);
 
         prev_fat_sec = curr_fat_sec;
         prev_fat_off = curr_fat_off;
         memcpy(prev_buf, buf, SECTOR_SIZE);
-        write_block(get_clusN_sector(curr_fat_sec * FAT_ENT_PER_SEC + curr_fat_off), data + curr_clus * SECTOR_SIZE);
-        curr_clus++;
+
+        curr_clus_num++;
         curr_fat_idx = *(uint32_t *)(buf + curr_fat_off);
     }
+
 
     return first_clus;
 }
@@ -299,7 +306,8 @@ void fat32_writeback(struct vnode *vnode)
         read_block(fat32_meta.db_sector, buf);
         tmp_dir_ptr = (FAT32DirEnt *)buf;
 
-        int i;
+        /* Find the empty root directory entry */
+        int i, j;
         for (i = 0; i < total_ent; i++) {
             if (strlen(tmp_dir_ptr->name) == 0)
                 break;
@@ -323,15 +331,30 @@ void fat32_writeback(struct vnode *vnode)
         tmp_dir_ptr->last_acc_date = 0;
         tmp_dir_ptr->wrt_time = 0;
         tmp_dir_ptr->wrt_date = 0;
+
+        memset(&tmp_dir_ptr->name, ' ', 11);
+        for (i = 0; i < 8 && vnode->component_name[i] != '.'; i++)
+            tmp_dir_ptr->name[i] = vnode->component_name[i];
+        
+        /* Find the '.' */
+        while (vnode->component_name[i] != '.' && i < strlen(vnode->component_name))
+            i++;
+
+        i++;
+        j = 0;
+        while (j < 3 && i < strlen(vnode->component_name))
+            tmp_dir_ptr->ext[j++] = vnode->component_name[i++];
+
         tmp_dir_ptr->file_size = vnode->size;
 
-        first_clus = fat32_writeback_internal(FAT_ENT_EOF, vnode->internal.mem, vnode->size);
+        first_clus = fat32_writeback_internal(0, vnode->internal.mem, vnode->size);
         if (first_clus == -1)
             return;
 
         tmp_dir_ptr->fst_clus_hi = first_clus >> 16;
-        tmp_dir_ptr->fst_clus_lo = first_clus && 0xffff;
+        tmp_dir_ptr->fst_clus_lo = first_clus & 0xffff;
         
+        write_block(fat32_meta.db_sector, buf);
     } else {
         first_clus = (fat32_dir_ent.fst_clus_hi << 16) + fat32_dir_ent.fst_clus_lo;
         fat32_writeback_internal(first_clus, vnode->internal.mem, vnode->size);

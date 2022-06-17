@@ -245,6 +245,7 @@ uint32_t create_user_task(const char *pathname)
     list_add_tail(&task->list, &rq.list);
     rq.len++;
     enable_intr();
+    
     return 0;
 }
 

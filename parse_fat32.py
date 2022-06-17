@@ -147,10 +147,10 @@ for desc in in_used_partition_desc:
     fat_data = img[fat_offset:fat_offset_end]
 
     print("======== first 4 FAT ========")
-    for i in range(0, len(fat_data), 0x4):
-        if get_int(fat_data[i:i+4]) == 0xfff:
-            print(i)
-            break
+    # for i in range(0, len(fat_data), 0x4):
+        # if get_int(fat_data[i:i+4]) == 0:
+        #     print("empty fat ent idx: ", hex(i))
+        #     break
         # print(hex(get_int(fat_data[i:i+4])))
 
     # In fat32, the rootdir is included in the data block sector
@@ -190,5 +190,6 @@ for desc in in_used_partition_desc:
         start_offset = get_clus_N_offset(ent.fst_clus)
         size_clus = math.ceil(ent.file_size / sector_size)
         end_offset = get_clus_N_offset(ent.fst_clus + size_clus)
-        print(f"file {ent.name}.{ent.ext} in {hex(start_offset)} - {hex(end_offset)}")
-        # open(f"./{ent.name}.{ent.ext}", "wb").write(img[start_offset:end_offset])
+        print(f"file {ent.name}.{ent.ext} in {hex(start_offset)} ({ent.fst_clus}) - {hex(end_offset)}")
+        # if ent.name == "FAT_WS":
+        #     open(f"./{ent.name}.{ent.ext}", "wb").write(img[start_offset:end_offset])

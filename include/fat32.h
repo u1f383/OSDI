@@ -28,12 +28,15 @@ typedef struct PartitionDesc {
 typedef struct FAT32DirEnt {
     char name[8];
     char ext[3];
+    
     uint8_t attr;
     uint8_t ntres;
     uint8_t crt_time_tench;
+
     uint16_t crt_time;
     uint16_t crt_date;
     uint16_t last_acc_date;
+    
     uint16_t fst_clus_hi;
     uint16_t wrt_time;
     uint16_t wrt_date;
