@@ -239,7 +239,9 @@ int vfs_read(struct file *file, void *buf, uint64_t len)
 
 long vfs_lseek64(struct file *file, long offset, int whence)
 {
-    file->f_pos = whence + offset;
+    if (whence == SEEK_SET)
+        file->f_pos = offset;
+    
     return 0;
 }
 

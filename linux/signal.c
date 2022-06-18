@@ -68,9 +68,13 @@ void sigctx_update(void *trap_frame, void (*handler)())
     tf->sp_el0 -= 0x100;
 }
 
+#define SPSR_MODE_EL0 0b0000
 void try_signal_handle(void *trap_frame)
 {
-    if (current->signal_queue)
+    TrapFrame *tf = (TrapFrame *)trap_frame;
+    uint32_t mode = tf->spsr_el1 & 0b1111;
+    
+    if (current->signal_queue && mode == SPSR_MODE_EL0)
     {
         uint32_t signo = current->signal_queue;
         current->signal_queue = 0;

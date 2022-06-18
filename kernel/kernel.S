@@ -214,7 +214,6 @@ dummy_handler3:
 # -------------------------
 .align 7
     # 4
-    qq:
     b sync_exception_handler
 .align 7
     # 5 - SP_ELx - IRQ
@@ -354,4 +353,5 @@ irq_handler_wrapper:
 
     msr DAIFSet, 0xf
     restore_registers
+    qq:
     eret

@@ -71,6 +71,7 @@ void register_mem_reserve(uint64_t start, uint64_t end)
         pg_iter->order = PAGE_ORDER_UND;
         pg_iter++;
     }
+
     #ifdef DEBUG_MM
     printf("[DEBUG] Reserve memory from 0x%x to 0x%x\r\n", start, end);
     #endif /* DEBUG_MM */

@@ -167,7 +167,8 @@ for desc in in_used_partition_desc:
         if rootdir_data[i:i+8] == b'\x00' * 8:
             break
 
-        print(get_dir_attr(rootdir_data[i+11]))
+        if get_dir_attr(rootdir_data[i+11]) == "long_name":
+            continue
         dir_ent = DirEnt(
             rootdir_data[i:i+8].strip().decode(),
             rootdir_data[i+8:i+11].strip().decode(),

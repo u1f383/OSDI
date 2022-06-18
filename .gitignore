@@ -2,7 +2,6 @@
 .vscode
 .DS_store
 nctuos.img
-sfn_nctuos.img
 build
 test.dSYM
 kernel8.img
@@ -11,3 +10,6 @@ client
 rootfs
 initramfs.cpio
 bcm2710-rpi-3-b-plus.dtb
+qq
+sfn_nctuos*
+screenlog*

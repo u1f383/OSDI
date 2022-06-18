@@ -235,7 +235,10 @@ int async_uart_send_num(const char *buf, int num)
 #define MAILBOX_CH_PROP 8
 
 #define MBOX_BUF_SIZE 64
-volatile uint32_t mbox[MBOX_BUF_SIZE];
+volatile unsigned int  __attribute__((aligned(16))) mbox[MBOX_BUF_SIZE];
+static unsigned int width, height, pitch, isrgb;
+static unsigned int lfb_size = 0;
+unsigned char *lfb;
 
 static int mailbox_call(uint32_t channel)
 {
@@ -260,6 +263,13 @@ int mailbox_call_wrapper(uint32_t channel, volatile uint32_t *_mbox)
     
     return mailbox_call(channel);
 }
+
+struct framebuffer_info {
+    unsigned int width;
+    unsigned int height;
+    unsigned int pitch;
+    unsigned int isrgb;
+};
 
 void mailbox_init(struct vnode *vnode)
 {
@@ -310,10 +320,15 @@ void mailbox_init(struct vnode *vnode)
     // this might not return exactly what we asked for, could be
     // the closest supported resolution instead
     if (mailbox_call(MAILBOX_CH_PROP) && mbox[20] == 32 && mbox[28] != 0) {
+        width = mbox[5];
+        height = mbox[6];
+        pitch = mbox[33];
+        isrgb = mbox[24];
+
+        lfb_size = mbox[29];
         mbox[28] &= 0x3FFFFFFF;
-        vnode->internal.mem = (void *)phys_to_virt(mbox[28]);
-        vnode->size = mbox[29];
-    }
+        lfb = (void *)phys_to_virt(mbox[28]);
+    };
 }
 
 int uart_write(struct file *file, const void *buf, uint64_t len)
@@ -331,46 +346,22 @@ int fb_write(struct file *file, const void *buf, uint64_t len)
     const char *ptr = buf;
     uint64_t i;
 
-    if ((uint64_t)file->vnode->internal.mem == MM_VIRT_KERN_START)
-        hangon();
-
-    for (i = 0; i < len && file->f_pos < file->vnode->size; i++, file->f_pos++)
-        *(file->vnode->internal.mem + file->f_pos) = *ptr++;
+    for (i = 0; i < len && file->f_pos < lfb_size; i++, file->f_pos++)
+        *(lfb + file->f_pos) = *ptr++;
 
     return i;
 }
 
-struct framebuffer_info {
-    unsigned int width;
-    unsigned int height;
-    unsigned int pitch;
-    unsigned int isrgb;
-};
-
 int fb_ioctl(struct file *file, unsigned long request, va_list args)
 {
-    struct framebuffer_info *fbinfo = va_arg(args, struct framebuffer_info*);
+    if (request == 0) {
+        struct framebuffer_info *fbinfo = va_arg(args, struct framebuffer_info *);
 
-    mbox[0] = 17 * 4;
-    mbox[1] = MAILBOX_REQ_CODE_PROC_REQ;
+        fbinfo->width = width;
+        fbinfo->height = height;
+        fbinfo->pitch = pitch;
+        fbinfo->isrgb = isrgb;
+    }
 
-    mbox[2] = 0x48003;
-    mbox[3] = 8;
-    mbox[4] = 8;
-    mbox[5] = fbinfo->width;
-    mbox[6] = fbinfo->height; 
-
-    mbox[7] = 0x48006;
-    mbox[8] = 4;
-    mbox[9] = 4;
-    mbox[10] = fbinfo->isrgb;
-
-    mbox[11] = 0x40008;
-    mbox[12] = 4;
-    mbox[13] = 4;
-    mbox[14] = fbinfo->pitch;
-
-    mbox[15] = MAILBOX_TAG_END;
-
-    return mailbox_call(MAILBOX_CH_PROP);
+    return 0;
 }

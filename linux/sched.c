@@ -3,7 +3,6 @@
 #include <vm.h>
 #include <signal.h>
 #include <irq.h>
-#include <printf.h>
 #include <util.h>
 #include <types.h>
 #include <initramfs.h>
@@ -175,12 +174,6 @@ uint32_t create_kern_task(void(*func)(), void *arg)
     return 0;
 }
 
-void fuck()
-{
-    printf("FUCK!\r\n");
-    hangon();
-}
-
 uint32_t create_user_task(const char *pathname)
 {
     char component_name[16];
@@ -314,6 +307,8 @@ int32_t svc_fork()
     task->workdir = current->workdir;
 
     task->fdt = kmalloc(sizeof(struct fdt_struct));
+    memset(task->fdt, 0, sizeof(struct fdt_struct));
+
     for (int i = 0; i < FDT_SIZE; i++) {
         if (current->fdt->files[i] != NULL) {
             task->fdt->files[i] = kmalloc(sizeof(struct file));
@@ -334,7 +329,7 @@ int32_t svc_fork()
     task->prio = current->prio;
     task->status = RUNNING;
 
-    task->kern_stack = kmalloc(THREAD_STACK_SIZE);
+    task->kern_stack = buddy_alloc(4);
     memcpy(task->kern_stack, current->kern_stack, THREAD_STACK_SIZE);
 
     uint64_t tf_offset = (uint64_t)tf - (uint64_t)current->kern_stack;

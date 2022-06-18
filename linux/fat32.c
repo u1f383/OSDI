@@ -113,7 +113,6 @@ static uint32_t fat32_writeback_internal(uint32_t curr_fat_idx, char *data, uint
         curr_fat_idx = *(uint32_t *)(buf + curr_fat_off);
     }
 
-
     return first_clus;
 }
 
@@ -291,6 +290,7 @@ int fat32_open(struct vnode *dir_node, struct vnode *vnode,
     return 0;
 }
 
+#define LAST_LON_ENTRY 0x40
 void fat32_writeback(struct vnode *vnode)
 {
     FAT32DirEnt fat32_dir_ent;
@@ -309,7 +309,10 @@ void fat32_writeback(struct vnode *vnode)
         /* Find the empty root directory entry */
         int i, j;
         for (i = 0; i < total_ent; i++) {
-            if (strlen(tmp_dir_ptr->name) == 0)
+            if (tmp_dir_ptr->attr == FAT32_ATTR_LONG_NAME) {
+                if (*(uint8_t *)tmp_dir_ptr & LAST_LON_ENTRY)
+                    break;
+            } else if (strlen(tmp_dir_ptr->name) == 0)
                 break;
             
             tmp_dir_ptr++;
