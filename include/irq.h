@@ -5,7 +5,7 @@
 #include <list.h>
 #include <util.h>
 
-#define TIME_UNIT 0x100
+#define TIME_UNIT 0x1000
 #define TIME_SLOT 0x1
 
 #define INT_MAX_DEPTH 0x10

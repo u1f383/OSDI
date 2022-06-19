@@ -285,7 +285,7 @@ void do_page_fault(uint64_t far, uint32_t esr)
         if (ISS_WNR_IS_READ(esr) && !(vma->prot & (PROT_WRITE | PROT_READ)))
             goto segfault;
     } else if (ISS_EC_INSN_ABORT(esr) && !(vma->prot & PROT_EXEC))
-        goto segfault;    
+        goto segfault;
 
     printf("[Translation fault]: %lx\r\n", addr);
 

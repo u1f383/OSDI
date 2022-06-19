@@ -485,5 +485,5 @@ int svc_ioctl(int fd, unsigned long request, ...)
 
 void svc_sync()
 {
-    fat32_sb_sync();   
+    fat32_sb_sync();
 }
